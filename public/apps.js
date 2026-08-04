@@ -272,6 +272,8 @@
           </section>`,
         footer: writingRow(secs.length ? 'writing' : 'writing your lesson'),
       });
+      // diagrams appear the moment their fence closes, mid-lesson
+      Rich.enhance(el.querySelector('.draft-root'));
       return;
     }
     const art = CTX.currentArtifact('lesson');
@@ -286,6 +288,9 @@
             <div class="lesson-body">${md(s.body)}</div>
           </section>`).join('')}
       </div>`;
+    // mount diagrams, maths, charts and code highlighting on the fresh subtree
+    Rich.enhance(el.querySelector('.lesson'));
+
     el.querySelectorAll('.lesson-sec h3').forEach(h => h.onclick = () => {
       const i = Number(h.closest('.lesson-sec').dataset.i);
       const s = d.sections[i];

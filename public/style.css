@@ -720,6 +720,45 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 .lesson-body hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 .lesson-body .md-h { font: 600 12px 'IBM Plex Sans', sans-serif; color: var(--text); margin: 14px 0 6px; letter-spacing: -0.1px; }
 
+/* diagrams, charts and maths */
+.viz {
+  margin: 12px 0; padding: 10px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  overflow-x: auto; text-align: center;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+/* A diagram illustrates the prose — it must not swallow the tile. Capped by
+   default, click to open it out. */
+.viz svg { max-width: 100%; width: auto; height: auto; max-height: 420px; transition: max-height 320ms var(--ease-spring); }
+.viz-diagram { cursor: zoom-in; position: relative; }
+.viz-diagram.zoom { cursor: zoom-out; }
+.viz-diagram.zoom svg { max-height: none; width: 100%; }
+.viz-diagram::after {
+  content: '⤢'; position: absolute; top: 6px; right: 8px;
+  font-size: 11px; color: var(--text-faint); opacity: 0;
+  transition: opacity 160ms ease;
+}
+.viz-diagram:hover::after { opacity: 0.8; }
+.viz .viz-fallback {
+  display: none;
+  font: 400 10.5px/1.55 'IBM Plex Mono', monospace;
+  color: var(--text-faint); text-align: left; white-space: pre-wrap;
+}
+/* not yet mounted, or the CDN never answered: show the source, it still reads */
+.viz:not([data-done]) .viz-fallback,
+.viz[data-done="offline"] .viz-fallback,
+.viz.viz-error .viz-fallback { display: block; }
+.viz.viz-error { border-color: rgba(240, 168, 60, 0.35); }
+.viz.viz-error::before {
+  content: 'diagram source'; display: block; text-align: left;
+  font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--warn); margin-bottom: 5px;
+}
+.katex { font-size: 1.02em; }
+.katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+pre.code.streaming { opacity: 0.75; }
+
 /* tables */
 .tablewrap { margin: 10px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 .tablewrap table { border-collapse: collapse; width: 100%; font-size: 12px; }

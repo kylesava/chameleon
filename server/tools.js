@@ -89,7 +89,18 @@ const TOOLS = [
   },
   {
     name: 'create_lesson',
-    description: 'Write a lesson the learner reads in the lesson tile. Markdown body per section. Ground it in the notebook sources when they exist. Opens the lesson app automatically. Pass artifact_id to revise an existing lesson instead of creating a new one.',
+    description: `Write a lesson the learner reads in the lesson tile. Opens the lesson app automatically. Pass artifact_id to revise an existing lesson instead of creating a new one.
+
+Section bodies are RICH markdown and the renderer is genuinely capable — use it. Every section should earn its screen space with something more than paragraphs:
+
+- **Mermaid diagrams** in a \`\`\`mermaid fence — the highest-value tool you have. Use flowchart/graph for processes and pipelines, sequenceDiagram for protocols and interactions over time, stateDiagram-v2 for state machines and lifecycles, erDiagram for data models, mindmap for concept breakdowns, timeline for history, journey for user experience, pie for proportions, quadrantChart for 2x2 trade-offs, xychart-beta for trends, gitGraph for branching. STICK TO THESE — other types render as broken text. Keep to ~12 nodes; label the edges (they carry the teaching). Put a plain-language sentence next to every diagram, so it still teaches if the picture fails.
+- **Tables** for anything with parallel structure: comparisons, parameter meanings, before/after, layer-by-layer breakdowns. Far better than a bulleted list of pairs.
+- **Callouts** — \`> [!KEY] title\` for the one idea that must stick, \`[!WARNING]\` for the mistake everyone makes, \`[!TIP]\` for a shortcut, \`[!EXAMPLE]\` for a worked case, \`[!QUESTION]\` to make them predict before you tell them.
+- **Maths** with LaTeX between $...$ inline or $$...$$ on its own line. Use real notation, not ASCII.
+- **Charts** in a \`\`\`chart fence containing a Vega-Lite spec ({"data":{"values":[...]},"mark":"bar","encoding":{...}}) when actual numbers tell the story.
+- **Code** in a fenced block with its language tag; it gets syntax highlighting.
+
+Aim for a diagram or table in most sections, and at least one callout per lesson. Do not decorate for its own sake — every visual must carry meaning the prose would labour over.`,
     input_schema: {
       type: 'object',
       required: ['title', 'sections'],
@@ -102,7 +113,7 @@ const TOOLS = [
             required: ['heading', 'body'],
             properties: {
               heading: { type: 'string' },
-              body: { type: 'string', description: 'Markdown. Keep sections tight — the learner can click any section to go deeper.' },
+              body: { type: 'string', description: 'Rich markdown: prose plus mermaid fences, tables, callouts, $maths$, chart fences, code. Keep the prose tight — the visuals do the heavy lifting. The learner can click any section to go deeper.' },
             },
           },
         },
