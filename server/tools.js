@@ -195,6 +195,56 @@ const TOOLS = [
   },
 ];
 
+/* ---- live drafting (commandment 7) ----
+   Which tool fills which app, the array we stream out of its still-arriving
+   input, and the line shown the instant the tool starts. */
+const DRAFTABLE = {
+  create_quiz:       { app: 'quiz',       field: 'questions', size: 'l', status: 'Writing your quiz…' },
+  create_lesson:     { app: 'lesson',     field: 'sections',  size: 'l', status: 'Writing the lesson…' },
+  create_flashcards: { app: 'flashcards', field: 'cards',     size: 'm', status: 'Building the deck…' },
+  create_podcast:    { app: 'podcast',    field: 'lines',     size: 'm', status: 'Recording the episode…' },
+  update_plan:       { app: 'plan',       field: 'tasks',     size: 'm', status: 'Mapping out your goals…' },
+};
+/* Tools with no streamable body still announce themselves. */
+const TOOL_STATUS = {
+  set_task_status: 'Updating your goals…',
+  narrate: null,
+  layout: null,
+  add_note: 'Adding a note…',
+};
+
+/* Pull complete objects out of a partial JSON string mid-stream. Returns every
+   finished element of `field`'s array so far; the caller tracks how many it has
+   already shown. Tolerates the truncated tail — that's the whole point. */
+function draftScan(partialJson, field) {
+  const key = `"${field}"`;
+  const k = partialJson.indexOf(key);
+  if (k < 0) return [];
+  const start = partialJson.indexOf('[', k);
+  if (start < 0) return [];
+  const out = [];
+  let depth = 0, inStr = false, esc = false, objStart = -1;
+  for (let i = start + 1; i < partialJson.length; i++) {
+    const c = partialJson[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '{') { if (depth === 0) objStart = i; depth++; }
+    else if (c === '}') {
+      depth--;
+      if (depth === 0 && objStart >= 0) {
+        try { out.push(JSON.parse(partialJson.slice(objStart, i + 1))); } catch {}
+        objStart = -1;
+      }
+    } else if (c === ']' && depth === 0) break;
+  }
+  return out;
+}
+
 /* ---- layout snapshot helpers (server-side mirror of the client grid) ---- */
 function applyLayoutActions(layout, actions) {
   let out = [...layout];
@@ -317,4 +367,4 @@ function makeExecutors(ctx) {
   };
 }
 
-module.exports = { TOOLS, APP_IDS, SIZES, makeExecutors, applyLayoutActions };
+module.exports = { TOOLS, APP_IDS, SIZES, makeExecutors, applyLayoutActions, DRAFTABLE, TOOL_STATUS, draftScan };

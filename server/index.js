@@ -18,14 +18,52 @@ const db = open();
 const store = makeStore(db);
 const api = makeApi(store);
 
-function serveStatic(res, root, file) {
+/* Asset versioning. Without an explicit Cache-Control the CDN in front of this
+   (Cloudflare) applies its own multi-hour TTL to .js/.css — a deploy then ships
+   new HTML against stale scripts, which breaks in confusing ways. HTML is never
+   cached, so stamping the asset URLs it references makes every deploy land at
+   once, and lets the assets themselves be cached hard and safely. */
+function assetVersion(dir) {
+  let newest = 0;
+  const walk = d => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else newest = Math.max(newest, fs.statSync(p).mtimeMs);
+    }
+  };
+  try { walk(dir); } catch {}
+  return Math.round(newest).toString(36);
+}
+const VERSION = assetVersion(PUB);
+
+function serveStatic(res, root, file, query) {
   if (file === '/' || file === '') file = '/index.html';
   const full = path.join(root, path.normalize(file));
   if (!full.startsWith(root) || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
     res.writeHead(404); res.end('not found');
     return;
   }
-  res.writeHead(200, { 'content-type': MIME[path.extname(full)] || 'application/octet-stream' });
+  const ext = path.extname(full);
+  const type = MIME[ext] || 'application/octet-stream';
+
+  if (ext === '.html') {
+    // never cache the entry point; stamp the assets it pulls in
+    const html = fs.readFileSync(full, 'utf8')
+      .replace(/\b(src|href)="(?!https?:|\/\/)([^"?#]+\.(?:js|css|png))"/g, `$1="$2?v=${VERSION}"`);
+    res.writeHead(200, {
+      'content-type': type,
+      'cache-control': 'no-cache, must-revalidate',
+    });
+    res.end(html);
+    return;
+  }
+
+  res.writeHead(200, {
+    'content-type': type,
+    // a stamped URL is safe to cache hard; an unstamped one must revalidate
+    'cache-control': query && query.get('v') ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate',
+  });
   fs.createReadStream(full).pipe(res);
 }
 
@@ -42,7 +80,7 @@ const server = http.createServer(async (req, res) => {
         if (await demo.handle(req, res, sub)) return;
         res.writeHead(404); return res.end('not found');
       }
-      return serveStatic(res, DEMO_PUB, sub);
+      return serveStatic(res, DEMO_PUB, sub, u.searchParams);
     }
 
     /* the real app */
@@ -52,7 +90,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(404, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ error: 'no such endpoint' }));
     }
-    return serveStatic(res, PUB, p);
+    return serveStatic(res, PUB, p, u.searchParams);
   } catch (e) {
     console.error('[http]', e);
     try { res.writeHead(500); res.end('server error'); } catch {}

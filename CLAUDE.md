@@ -36,8 +36,18 @@ against them; when a feature conflicts with a commandment, the commandment wins.
    transcript).
 
 6. **The agent makes plans in support of the user's goals.** Plans contain
-   tasks that can be parallel or sequential. Eventually plans may get their own
-   UI surface; initially they just live in the chat history.
+   tasks that can be parallel or sequential. **They are goals the system
+   progresses *with* the user — not a to-do list handed to them.** The agent
+   drives the plan forward as it teaches; the user can steer, but nothing waits
+   on them ticking a box. Always show which goal is live right now.
+
+7. **Never make the user wait to see what's happening.** The moment the agent
+   starts something, the user sees it start: the app window opens first and
+   says what's being made, and the content streams in as it is written — quiz
+   questions appearing one by one, not a spinner then a finished block. Status
+   of this kind is **ephemeral**: it lives in the app window and vanishes when
+   the work lands. It never becomes chat history (that's what narration is
+   for).
 
 ## Where each commandment lives in the code
 
@@ -47,12 +57,14 @@ against them; when a feature conflicts with a commandment, the commandment wins.
 | 2 | `playQueue()` in `public/main.js` — every server event enters one queue and plays with ~700ms spacing, one focus at a time. The server also drops no-op re-opens (`applyLayoutActions`). |
 | 3 | The `narrate` tool (`server/tools.js`) → `narrateInTile()` overlay + mirrored into `message` rows with `kind='narration'`. |
 | 4 | `body.busy` turns the send button into the stop button (`style.css`); `Chat.stop()` aborts the fetch and fast-forwards the queue. |
-| 5 | `#chatdock.fused` is one card holding history + composer; `body.acting` collapses the history away while the queue plays. |
-| 6 | `plan` + `plan_task` tables (stages = parallel/sequential), the `update_plan` / `set_task_status` tools, and the `plan` app — the checklist is the spine of every session. |
+| 5 | `#chatdock.fused` is one card holding history + composer; `body.acting` collapses the history away while the queue plays, and `#chat-collapse` hides it on demand. Placement (`place-center/left/right/mini`) moves the whole fused surface — drag the grip, or `?place=` for demo links. |
+| 6 | `plan` + `plan_task` tables (stages = parallel/sequential), the `update_plan` / `set_task_status` tools, and the `plan` app. The agent is told to advance statuses itself as it teaches; the tile leads with the live goal. |
+| 7 | `server/agent.js` emits `tool_start` the instant a tool call begins and `draft` events parsed from the still-streaming tool input (`draftScan`). The client opens the target tile immediately with an ephemeral status and renders items as they arrive — see `state.draft` in `public/main.js`. |
 
 ## Hard constraints
 
 - **Node 24+**, zero npm dependencies. Keep it that way — no framework, no build step.
 - **One process, one SQLite file** (`data/chameleon.db`). Never run two instances against it.
+- **Static assets are served with a `?v=` stamp** (`assetVersion` in `server/index.js`). Without it the CDN caches `.js`/`.css` for hours and a deploy ships new HTML against stale scripts. Don't remove the stamping or the `no-cache` header on HTML.
 - Secrets live in `.env` (gitignored): `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`.
 - The notebook (`source` rows) is ground truth for teaching — never contradict it.

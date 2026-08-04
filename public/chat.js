@@ -10,12 +10,106 @@
   const input = document.getElementById('chat-input');
   const sendBtn = document.getElementById('chat-send');
   const dock = document.getElementById('chatdock');
+  const statusEl = document.getElementById('chat-status');
+  const collapseBtn = document.getElementById('chat-collapse');
+  const whereEl = document.getElementById('chat-where');
 
   /* The card backdrop exists only when there is history to hold — otherwise
      the composer floats bare over the workspace. */
   function syncFused() {
     dock.classList.toggle('fused',
       document.body.classList.contains('has-msgs') && !document.body.classList.contains('chat-center'));
+  }
+
+  /* ---------------- placement (dock left/right, centre, minimised) ----------------
+     The surface stays fused; this is only WHERE it sits. Persisted per browser. */
+  const PLACES = ['center', 'left', 'right', 'mini'];
+  const LABEL = { center: 'centre', left: 'docked left', right: 'docked right', mini: 'minimised' };
+  // ?place=left|right|center|mini overrides the stored preference (handy for
+  // demo links and screenshots); it does not overwrite what you last chose.
+  const urlPlace = new URLSearchParams(location.search).get('place');
+  let place = urlPlace || localStorage.getItem('cham_place') || 'center';
+  let collapsed = localStorage.getItem('cham_collapsed') === '1';
+  let onPlaceChange = () => {};
+
+  function applyPlace(p, opts = {}) {
+    if (!PLACES.includes(p)) return;
+    place = p;
+    if (!opts.transient) localStorage.setItem('cham_place', p);
+    for (const x of PLACES) document.body.classList.toggle('place-' + x, x === p);
+    whereEl.textContent = LABEL[p];
+    syncCollapse();
+    onPlaceChange();
+  }
+
+  function syncCollapse() {
+    // minimised implies hidden history; otherwise honour the user's toggle
+    document.body.classList.toggle('chat-collapsed', collapsed || place === 'mini');
+    collapseBtn.title = collapsed ? 'Show the conversation' : 'Hide the conversation';
+  }
+  function setCollapsed(v) {
+    collapsed = v;
+    localStorage.setItem('cham_collapsed', v ? '1' : '0');
+    syncCollapse();
+    if (!v) scroll();
+  }
+
+  collapseBtn.addEventListener('click', e => { e.preventDefault(); setCollapsed(!collapsed); });
+
+  /* click the minimised pill to bring it back */
+  dock.addEventListener('click', e => {
+    if (place === 'mini' && !e.target.closest('#chat-form, #chat-collapse')) {
+      applyPlace(localStorage.getItem('cham_place_prev') || 'center');
+    }
+  });
+
+  /* drag the grip: edges dock, bottom-right corner minimises, else centre */
+  const stage = document.getElementById('stage');
+  const zones = {};
+  for (const [id, label] of [['left', 'Dock left'], ['right', 'Dock right'], ['center', 'Centre'], ['mini', 'Minimise']]) {
+    const z = document.createElement('div');
+    z.className = 'zone';
+    z.id = 'zone-' + id;
+    z.textContent = label;
+    stage.appendChild(z);
+    zones[id] = z;
+  }
+  document.getElementById('chat-grip').addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const sr = stage.getBoundingClientRect();
+    let moved = false, target = place;
+    const mv = ev => {
+      if (!moved) {
+        if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 5) return;
+        moved = true;
+        document.body.classList.add('chatzones', 'dragging');
+      }
+      const x = ev.clientX - sr.left, y = ev.clientY - sr.top;
+      target = (y > sr.height - 120 && x > sr.width - 320) ? 'mini'
+        : x < 210 ? 'left'
+        : x > sr.width - 210 ? 'right'
+        : 'center';
+      for (const k in zones) zones[k].classList.toggle('arm', target === k);
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', mv);
+      window.removeEventListener('mouseup', up);
+      document.body.classList.remove('chatzones', 'dragging');
+      for (const k in zones) zones[k].classList.remove('arm');
+      if (!moved) return;
+      if (target === 'mini' && place !== 'mini') localStorage.setItem('cham_place_prev', place);
+      applyPlace(target);
+    };
+    window.addEventListener('mousemove', mv);
+    window.addEventListener('mouseup', up);
+  });
+
+  /* ---------------- ephemeral status (commandment 7) ----------------
+     Shown while the agent works; never written to history. */
+  function setStatus(text) {
+    statusEl.querySelector('span').textContent = text || '';
+    document.body.classList.toggle('has-status', !!text);
   }
 
   let CFG = {
@@ -90,7 +184,7 @@
 
   function setBusy(on) {
     document.body.classList.toggle('busy', on);
-    if (!on) document.body.classList.remove('acting');
+    if (!on) { document.body.classList.remove('acting'); setStatus(null); }
   }
 
   /* ---- the turn ---- */
@@ -188,12 +282,18 @@
   });
 
   window.Chat = {
-    configure: o => { CFG = { ...CFG, ...o }; },
+    configure: o => {
+      CFG = { ...CFG, ...o };
+      if (o.onPlaceChange) { onPlaceChange = o.onPlaceChange; }
+    },
     send,
     sendEvent: (desc, label, icon) => send(`[UI EVENT] The user ${desc}`, 'event', { label, icon }),
     renderHistory, addAgent, addUser, addChip, addNarration, addError,
-    turnSettled, stop,
+    turnSettled, stop, setStatus,
+    place: () => place,
+    applyPlace,
     isBusy: () => document.body.classList.contains('busy'),
     fillInput: t => { input.value = t; input.focus(); },
   };
+  applyPlace(place, { transient: !!urlPlace });
 })();

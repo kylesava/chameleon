@@ -3,7 +3,7 @@
    events to the client. Zero-dep: raw fetch + hand-rolled SSE parsing. */
 
 const { ENV } = require('./env.js');
-const { TOOLS, makeExecutors } = require('./tools.js');
+const { TOOLS, makeExecutors, DRAFTABLE, TOOL_STATUS, draftScan } = require('./tools.js');
 
 const API_KEY = ENV.ANTHROPIC_API_KEY;
 const MODEL = ENV.CHAMELEON_MODEL || 'claude-opus-5';
@@ -20,6 +20,9 @@ PRODUCT PRINCIPLES (non-negotiable):
 - ONE THING AT A TIME. The UI plays your actions sequentially. Do a few deliberate things per turn, not a flurry. 2-6 tool calls is a normal turn.
 - Narrate INSIDE the app you are working on (the narrate tool) — short lines like "Building your plan — check off what you already know." These mirror to chat history.
 - Your final text reply is shown in the chat history AFTER your workspace actions finish. Keep it short and warm: what you set up, what to do next. The tiles carry the content; the reply carries the direction.
+- NEVER MAKE THEM WAIT TO SEE WHAT'S HAPPENING. The moment you start a create_* or update_plan tool, its app opens and its content streams in as you write it — the learner watches questions and sections appear. So write in a natural reading order (first question first), and don't apologise for or announce latency.
+
+THE PLAN IS SHARED PROGRESS, NOT A TO-DO LIST YOU HAND OVER. You drive it: as you teach a goal, mark it "doing" (set_task_status) BEFORE you build the thing that serves it, and mark it "done" once the learner has actually shown it stuck — not merely been shown it. Exactly one task should be "doing" at a time; that is the "now" marker the learner steers by. Never park the plan waiting for them to tick a box; ticking is their override, not your trigger.
 
 THE SPINE: GOALS. Every journey runs on a lesson plan (update_plan) — a visible checklist the learner works through and checks off. Create one as soon as you understand the goal (2-3 stages, 3-8 tasks). When the learner checks a task, answers a quiz, or asks for something new, update task statuses and adapt: advance the plan, revise the lesson, add practice. The plan is a living object, not a formality.
 
@@ -85,8 +88,11 @@ function historyMessages(store, sessionId) {
   return msgs;
 }
 
-/* ---------- streaming: accumulate one assistant message ---------- */
-async function streamMessage(body, signal, onTextDelta) {
+/* ---------- streaming: accumulate one assistant message ----------
+   onEvent gets the live signals the UI needs to show work as it happens:
+   {t:'tool_start'} the moment a tool call begins, and {t:'draft'} for each
+   item parsed out of the still-arriving tool input. */
+async function streamMessage(body, signal, onTextDelta, onEvent = () => {}) {
   const up = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     signal,
@@ -119,14 +125,37 @@ async function streamMessage(body, signal, onTextDelta) {
       switch (ev.type) {
         case 'content_block_start':
           blocks[ev.index] = { ...ev.content_block };
-          if (ev.content_block.type === 'tool_use') blocks[ev.index]._json = '';
+          if (ev.content_block.type === 'tool_use') {
+            const b = blocks[ev.index];
+            b._json = '';
+            b._drafted = 0;
+            const spec = DRAFTABLE[b.name];
+            // Announce before a single byte of content exists.
+            onEvent({
+              t: 'tool_start',
+              name: b.name,
+              app: spec ? spec.app : null,
+              size: spec ? spec.size : null,
+              status: spec ? spec.status : (b.name in TOOL_STATUS ? TOOL_STATUS[b.name] : null),
+            });
+          }
           break;
         case 'content_block_delta': {
           const b = blocks[ev.index];
           if (!b) break;
           const d = ev.delta;
           if (d.type === 'text_delta') { b.text = (b.text || '') + d.text; onTextDelta(d.text); }
-          else if (d.type === 'input_json_delta') b._json += d.partial_json;
+          else if (d.type === 'input_json_delta') {
+            b._json += d.partial_json;
+            const spec = DRAFTABLE[b.name];
+            if (spec) {
+              const items = draftScan(b._json, spec.field);
+              if (items.length > b._drafted) {
+                onEvent({ t: 'draft', app: spec.app, field: spec.field, items: items.slice(b._drafted), index: b._drafted });
+                b._drafted = items.length;
+              }
+            }
+          }
           else if (d.type === 'thinking_delta') b.thinking = (b.thinking || '') + d.thinking;
           else if (d.type === 'signature_delta') b.signature = (b.signature || '') + d.signature;
           break;
@@ -136,6 +165,7 @@ async function streamMessage(body, signal, onTextDelta) {
           if (b && b.type === 'tool_use') {
             try { b.input = b._json ? JSON.parse(b._json) : {}; } catch { b.input = {}; }
             delete b._json;
+            delete b._drafted;
           }
           break;
         }
@@ -150,16 +180,25 @@ async function streamMessage(body, signal, onTextDelta) {
   return { content: blocks.filter(Boolean), stopReason };
 }
 
+/* Our own streaming bookkeeping (_json, _drafted) must never reach the API —
+   it rejects unknown keys on a tool_use block. Strip defensively: a stream cut
+   short never fires content_block_stop, so the per-block cleanup can be missed. */
+const stripScratch = b => {
+  if (!b || typeof b !== 'object') return b;
+  const out = {};
+  for (const k of Object.keys(b)) if (!k.startsWith('_')) out[k] = b[k];
+  return out;
+};
+
 /* After a mid-stream refusal fallback, blocks before the final `fallback`
    marker must be echoed without thinking/tool_use blocks. Returns the
    echo-safe content and the set of surviving tool_use ids. */
 function echoSafe(content) {
   const lastFb = content.map(b => b.type).lastIndexOf('fallback');
-  if (lastFb < 0) return { content, toolIds: new Set(content.filter(b => b.type === 'tool_use').map(b => b.id)) };
   const kept = [];
   content.forEach((b, i) => {
-    if (i < lastFb && (b.type === 'thinking' || b.type === 'redacted_thinking' || b.type === 'tool_use')) return;
-    kept.push(b);
+    if (lastFb >= 0 && i < lastFb && (b.type === 'thinking' || b.type === 'redacted_thinking' || b.type === 'tool_use')) return;
+    kept.push(stripScratch(b));
   });
   return { content: kept, toolIds: new Set(kept.filter(b => b.type === 'tool_use').map(b => b.id)) };
 }
@@ -200,7 +239,7 @@ async function runTurn(opts) {
     const { content, stopReason } = await streamMessage(body, signal, d => {
       replyParts.push(d);
       emit({ t: 'say', d });
-    });
+    }, emit);
 
     if (stopReason === 'refusal') {
       emit({ t: 'err', m: 'I had to decline that request. Try rephrasing it.' });

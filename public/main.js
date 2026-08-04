@@ -22,6 +22,8 @@
     artifacts: [],
     currentArt: {},    // app id -> artifact id
     tts: false,
+    draft: null,       // { app, field, items } — content streaming in right now
+    status: {},        // app id -> ephemeral "what I'm doing" line (never chat history)
   };
   const tiles = new Map();
 
@@ -55,6 +57,8 @@
     },
     ttsEnabled: () => state.tts,
     sessionId: () => state.sessionId,
+    draftFor: app => (state.draft && state.draft.app === app ? state.draft : null),
+    statusFor: app => state.status[app] || null,
     api,
     sourceAdded: src => { state.sources.push(src); dirty('sources'); },
     sourceRemoved: id => { state.sources = state.sources.filter(s => s.id !== id); dirty('sources'); },
@@ -64,6 +68,7 @@
     sessionId: () => state.sessionId,
     onEvent: ev => enqueue(ev),
     onTurnDone: () => { enqueue({ t: '_end' }); },
+    onPlaceChange: () => relayout(), // the canvas reclaims/yields the docked column
   });
   Chat.renderHistory(boot.messages); // also owns the chat-center / fused classes
 
@@ -136,8 +141,61 @@
   let fast = false;
 
   function enqueue(ev) {
+    /* Commandment 7: showing what's happening RIGHT NOW never waits in line
+       behind the pacing queue — these are a live view of the current step,
+       not a new step competing for attention. */
+    if (ev.t === 'tool_start') { beginDrafting(ev); return; }
+    if (ev.t === 'draft') { applyDraft(ev); return; }
     queue.push(ev);
     if (!playing) playQueue();
+  }
+
+  function beginDrafting(ev) {
+    if (ev.status) setStatus(ev.app, ev.status);
+    if (!ev.app) return;
+    state.draft = { app: ev.app, field: ev.field || null, items: [] };
+    document.body.classList.add('acting');
+    // open the tile FIRST so the content has somewhere visible to land
+    applyAction({ type: 'open', app: ev.app, size: ev.size || 'm', focus: true });
+  }
+
+  function applyDraft(ev) {
+    if (!state.draft || state.draft.app !== ev.app) state.draft = { app: ev.app, field: ev.field, items: [] };
+    state.draft.field = ev.field;
+    state.draft.items.push(...ev.items);
+    const app = findApp(ev.app);
+    if (app) { app.ui = null; dirty(ev.app); }
+  }
+
+  /* ephemeral status: lives in the tile + the composer strip, never in history */
+  function setStatus(app, text) {
+    if (app) {
+      state.status[app] = text;
+      const t = tiles.get(app);
+      if (t) paintStatus(app);
+    }
+    Chat.setStatus(text);
+  }
+  function clearStatus() {
+    for (const app of Object.keys(state.status)) {
+      delete state.status[app];
+      paintStatus(app);
+    }
+    Chat.setStatus(null);
+  }
+  function paintStatus(appId) {
+    const t = tiles.get(appId);
+    if (!t) return;
+    const txt = state.status[appId];
+    let el = t.el.querySelector('.tile-status');
+    if (!txt) { el?.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'tile-status';
+      el.innerHTML = '<i class="ts-dot"></i><span></span>';
+      t.el.querySelector('.tile-head').after(el);
+    }
+    el.querySelector('span').textContent = txt;
   }
   const sleep = ms => new Promise(r => setTimeout(r, fast ? 0 : ms));
 
@@ -147,6 +205,8 @@
       const ev = queue.shift();
       if (ev.t === '_end') {
         fast = false;
+        state.draft = null;
+        clearStatus();
         document.body.classList.remove('acting');
         Chat.turnSettled();
         continue;
@@ -171,6 +231,9 @@
       }
       case 'plan': {
         state.plan = ev.plan;
+        if (state.draft && state.draft.app === 'plan') state.draft = null;
+        delete state.status.plan;
+        paintStatus('plan');
         dirty('plan');
         break;
       }
@@ -178,6 +241,10 @@
         const i = state.artifacts.findIndex(a => a.id === ev.artifact.id);
         if (i >= 0) state.artifacts[i] = ev.artifact; else state.artifacts.push(ev.artifact);
         state.currentArt[ev.app] = ev.artifact.id;
+        // the finished thing replaces the draft it was streaming into
+        if (state.draft && state.draft.app === ev.app) state.draft = null;
+        delete state.status[ev.app];
+        paintStatus(ev.app);
         const app = findApp(ev.app);
         if (app) app.ui = null;
         dirty(ev.app);
@@ -238,12 +305,19 @@
   }
 
   /* ---------------- layout + tile DOM (carried from the POC) ---------------- */
+  const DOCK_W = 400; // keep in sync with --dock-side-w in style.css
   function metrics() {
     const r = stage.getBoundingClientRect();
     const centered = document.body.classList.contains('chat-center');
-    const width = r.width - 28;
+    const place = Chat.place();
+    let width = r.width - 28;
     let height = r.height - 28;
-    if (!centered) height -= 92; // the fused composer's reserved strip
+    if (!centered) {
+      // a side dock takes its own column; the centre dock reserves a bottom strip
+      if (place === 'left' || place === 'right') width -= DOCK_W + 12;
+      else if (place !== 'mini') height -= 92;
+      else height -= 26;
+    }
     return {
       cw: (width - GAP * (GRID.cols - 1)) / GRID.cols,
       ch: (height - GAP * (GRID.rows - 1)) / GRID.rows,
@@ -309,6 +383,7 @@
         t.size = p.size; t.w = geo.width; t.h = geo.height;
         t.cellPos = { x: p.x, y: p.y, w: p.w, h: p.h };
         renderTile(app, t);
+        paintStatus(p.id);
       } else {
         if (p.id !== state.dragId) {
           Object.assign(t.el.style, { left: geo.left + 'px', top: geo.top + 'px', width: geo.width + 'px', height: geo.height + 'px' });

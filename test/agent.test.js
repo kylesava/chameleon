@@ -58,6 +58,28 @@ test('echoSafe: no fallback → untouched', () => {
   assert.ok(toolIds.has('t1'));
 });
 
+test('echoSafe strips streaming scratch fields (the API rejects unknown keys)', () => {
+  const content = [
+    { type: 'text', text: 'hi' },
+    { type: 'tool_use', id: 't1', name: 'create_quiz', input: { title: 'q' }, _json: '{"title":"q"}', _drafted: 3 },
+  ];
+  const { content: out } = echoSafe(content);
+  const tu = out.find(b => b.type === 'tool_use');
+  assert.ok(!('_json' in tu) && !('_drafted' in tu), 'no underscore-prefixed keys survive');
+  assert.deepEqual(tu.input, { title: 'q' });
+  assert.equal(tu.id, 't1');
+});
+
+test('echoSafe strips scratch fields on the fallback path too', () => {
+  const content = [
+    { type: 'tool_use', id: 'dead', name: 'layout', input: {}, _json: '{}' },
+    { type: 'fallback', from: { model: 'a' }, to: { model: 'b' } },
+    { type: 'tool_use', id: 'live', name: 'narrate', input: {}, _drafted: 1 },
+  ];
+  const { content: out } = echoSafe(content);
+  assert.ok(out.every(b => !Object.keys(b).some(k => k.startsWith('_'))));
+});
+
 test('echoSafe: pre-fallback thinking/tool_use dropped, post-fallback kept', () => {
   const content = [
     { type: 'thinking', thinking: '' },

@@ -40,6 +40,16 @@
       <!-- The fused chat surface: composer always present, history rises above
            it, and the history yields while the agent acts in the apps. -->
       <div id="chatdock">
+        <div id="chat-bar">
+          <span id="chat-grip" title="Drag to move — edges dock, corner minimizes">
+            <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5.5" cy="4" r="1.2"/><circle cx="10.5" cy="4" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="10.5" cy="8" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/><circle cx="10.5" cy="12" r="1.2"/></svg>
+          </span>
+          <span id="chat-where"></span>
+          <button id="chat-collapse" type="button" title="Hide the conversation">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6.5L8 10l4-3.5"/></svg>
+          </button>
+        </div>
+        <div id="chat-status"><i></i><span></span></div>
         <div id="hero">
           <img class="hero-glyph" src="chameleon.png" alt="">
           <h1>What do you want to learn?</h1>
