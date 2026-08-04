@@ -60,11 +60,9 @@ body::after {
   border-bottom: 1px solid var(--line);
   z-index: 30;
 }
-#brand { display: flex; align-items: center; gap: 11px; flex: 0 0 auto; }
+#brand { display: flex; align-items: center; flex: 0 0 auto; }
 #brand-mark { width: 34px; height: 34px; }
 #brand-mark img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
-#brand b { display: block; font-size: 14px; letter-spacing: -0.1px; }
-#brand span { display: block; font-size: 9.5px; color: var(--text-faint); letter-spacing: 0.6px; text-transform: uppercase; }
 #topspacer { flex: 1; }
 
 /* session switcher */
@@ -519,6 +517,25 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 .lesson-body strong { color: var(--text); }
 .lesson-body code { font: 500 11px 'IBM Plex Mono', monospace; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
 .lesson-body ul, .lesson-body ol { margin: 7px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+pre.code {
+  position: relative;
+  margin: 9px 0; padding: 11px 13px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(0, 0, 0, 0.34);
+  overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+pre.code code {
+  display: block; background: none; border: 0; padding: 0;
+  font: 400 11.5px/1.6 'IBM Plex Mono', monospace;
+  color: #cfe0ff; white-space: pre; tab-size: 2;
+}
+pre.code[data-lang]::after {
+  content: attr(data-lang);
+  position: absolute; top: 6px; right: 9px;
+  font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-faint);
+}
+.bubble pre.code { margin: 7px 0; }
 .lesson-body li::marker { color: var(--accent); }
 .lesson-body h4 { font: 600 10px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-faint); margin: 10px 0 4px; }
 

@@ -59,6 +59,22 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+/* A stale older instance holding the port is the one failure that looks like a
+   working app: it serves these static files but answers /api/* with its own old
+   routes. Say so plainly instead of dumping an EADDRINUSE stack. */
+server.on('error', e => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(
+      `\nPort ${PORT} is already in use — most likely an older Chameleon still running.\n` +
+      'That instance will serve the current UI but answer the API with its old routes\n' +
+      '(you will see "Request failed (502)" in the app). Stop it and start again:\n' +
+      `  Windows:  for /f "tokens=5" %a in ('netstat -ano ^| findstr :${PORT}.*LISTENING') do taskkill /PID %a /F\n` +
+      `  macOS/Linux:  kill $(lsof -ti :${PORT})\n`);
+    process.exit(1);
+  }
+  throw e;
+});
+
 server.listen(PORT, () => {
   console.log(`Chameleon → http://localhost:${PORT}   (demo: /demo/)`);
   if (!ENV.ANTHROPIC_API_KEY) console.warn('WARNING: no ANTHROPIC_API_KEY in .env — the agent will fail.');

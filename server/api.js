@@ -101,8 +101,11 @@ function makeApi(store) {
       const ac = new AbortController();
       inflight.set(sessionId, ac);
       req.on('close', () => ac.abort()); // the stop button: client aborts the fetch
-      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       const emit = o => { try { res.write(`data: ${JSON.stringify(o)}\n\n`); } catch {} };
+      // A long thinking phase can emit nothing for a while; proxies (Cloudflare)
+      // drop idle connections. SSE comments keep it alive and are ignored by the client.
+      const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 15000);
 
       const layout = {
         get: () => JSON.parse(store.getSession(sessionId).layout_json),
@@ -120,6 +123,7 @@ function makeApi(store) {
         if (ac.signal.aborted) emit({ t: 'done', interrupted: true });
         else { console.error('[chat]', e); emit({ t: 'err', m: e.message }); }
       } finally {
+        clearInterval(heartbeat);
         if (inflight.get(sessionId) === ac) inflight.delete(sessionId);
         try { res.end(); } catch {}
       }
