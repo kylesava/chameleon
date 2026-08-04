@@ -374,11 +374,19 @@ body.tiledrag .tile:not(.drag) { pointer-events: none; }
 }
 .tile-narr img { width: 20px; height: 20px; flex: 0 0 auto; margin-top: 1px; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5)); }
 .tile-narr span { flex: 1; min-width: 0; }
-.tile-narr { cursor: pointer; transition: left var(--t-move) var(--ease-out), padding var(--t-move) var(--ease-out), border-radius var(--t-move) var(--ease-out), background var(--t-move) ease; }
+.tile-narr {
+  cursor: pointer;
+  transition: left var(--t-move) var(--ease-out), top var(--t-move) var(--ease-out),
+    bottom var(--t-move) var(--ease-out), padding var(--t-move) var(--ease-out),
+    border-radius var(--t-move) var(--ease-out), background var(--t-move) ease;
+}
 
-/* tucked: a small avatar in the corner, holding the line until you want it */
+/* Tucked: a small avatar holding the line until you want it. It parks at the
+   TOP right — the bottom of a tile is where controls live (deck bar, flip,
+   submit) and an avatar there sits on them. */
 .tile-narr.tucked {
-  left: auto; padding: 7px; border-radius: 999px;
+  left: auto; right: 10px; bottom: auto; top: 42px;
+  padding: 7px; border-radius: 999px;
   border-left-width: 1px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }

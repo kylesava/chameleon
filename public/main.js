@@ -344,7 +344,7 @@
     if (!t) return;
     const text = state.narration[appId];
     const existing = t.el.querySelector('.tile-narr');
-    if (!text) { existing?.remove(); t.body.style.paddingBottom = ''; return; }
+    if (!text) { existing?.remove(); t.body.style.paddingBottom = ''; t.body.style.paddingRight = ''; return; }
     if (existing && existing.dataset.text === text) return;
     existing?.remove();
 
@@ -354,8 +354,13 @@
     n.dataset.text = text;
     n.innerHTML = `<img src="chameleon.png" alt=""><span></span><button class="narr-x" title="Dismiss">×</button>`;
     t.el.appendChild(n);
-    // reserve room so the speech bubble never sits on top of the content
-    const reserve = () => { t.body.style.paddingBottom = n.classList.contains('tucked') ? '' : (n.offsetHeight + 16) + 'px'; };
+    // reserve room so neither the open bubble nor the tucked avatar ever sits
+    // on top of the tile's own content
+    const reserve = () => {
+      const tucked = n.classList.contains('tucked');
+      t.body.style.paddingBottom = tucked ? '' : (n.offsetHeight + 16) + 'px';
+      t.body.style.paddingRight = tucked ? '38px' : '';
+    };
     requestAnimationFrame(reserve);
 
     /* After a while it tucks itself into a small avatar in the corner rather
@@ -377,6 +382,7 @@
       delete state.narration[appId];
       n.classList.add('out');
       t.body.style.paddingBottom = '';
+      t.body.style.paddingRight = '';
       setTimeout(() => n.remove(), 300);
     };
     const span = n.querySelector('span');

@@ -61,6 +61,19 @@ against them; when a feature conflicts with a commandment, the commandment wins.
 | 6 | `plan` + `plan_task` tables (stages = parallel/sequential), the `update_plan` / `set_task_status` tools, and the `plan` app. The agent is told to advance statuses itself as it teaches; the tile leads with the live goal. |
 | 7 | `server/agent.js` emits `tool_start` the instant a tool call begins and `draft` events parsed from the still-streaming tool input (`draftScan`). The client opens the target tile immediately with an ephemeral status and renders items as they arrive — see `state.draft` in `public/main.js`. |
 
+## Checking your work
+
+- `public/_states.html` renders **every app in every state** — populated, empty,
+  drafting, degraded — side by side. Open it (or screenshot it headless) after
+  touching any renderer; most visual regressions show up there in one glance.
+- Motion has one vocabulary, defined at the top of `style.css`: things enter
+  with a little overshoot (`--t-in`, `--ease-out`) and leave quickly and
+  quietly (`--t-out`, `--ease-in`). Use `.enter-rise` / `.leave-fall` /
+  `.leave-slide` / `.stagger` rather than inventing a new keyframe, and let a
+  removal animation finish before the list reflows.
+- Never surface internal ids (task, artifact) in anything the learner reads —
+  in the UI or in what the agent says.
+
 ## Hard constraints
 
 - **Node 24+**, zero npm dependencies. Keep it that way — no framework, no build step.
