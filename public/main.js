@@ -48,8 +48,10 @@
   state.artifacts = boot.artifacts;
   state.tts = boot.tts;
   for (const a of boot.artifacts) state.currentArt[a.app] = a.id; // listed oldest→newest; last wins
-  // the last thing the agent said in each window survives a reload with it
+  // the last thing the agent said in each window survives a reload with it,
+  // tucked away rather than blanketing every tile on arrival
   for (const m of boot.messages) if (m.kind === 'narration' && m.app) state.narration[m.app] = m.content;
+  let narrationRestored = Object.keys(state.narration).length > 0;
 
   Apps.configure({
     getPlan: () => state.plan,
@@ -317,7 +319,12 @@
     if ((a.type === 'open' || a.type === 'resize' || a.type === 'focus') && REGISTRY[a.app]) {
       setTimeout(() => {
         const t = tiles.get(a.app);
-        if (t) spawnWaves(t.el, { rings: 1, spread: 110, dur: 720, color: `hsl(${REGISTRY[a.app].hue} 85% 68% / 0.5)` });
+        if (!t) return;
+        spawnWaves(t.el, { rings: 1, spread: 110, dur: 720, color: `hsl(${REGISTRY[a.app].hue} 85% 68% / 0.5)` });
+        t.el.classList.remove('pulse');
+        void t.el.offsetWidth;
+        t.el.classList.add('pulse');
+        setTimeout(() => t.el.classList.remove('pulse'), 950);
       }, 80);
     }
   }
@@ -327,6 +334,7 @@
      learner dismisses it, so the app window carries the teaching rather than
      the transcript. */
   function narrateInTile(appId, text) {
+    narrationRestored = false; // a live line arrives open, not tucked
     state.narration[appId] = text;
     paintNarration(appId);
   }
@@ -336,25 +344,46 @@
     if (!t) return;
     const text = state.narration[appId];
     const existing = t.el.querySelector('.tile-narr');
-    if (!text) { existing?.remove(); return; }
+    if (!text) { existing?.remove(); t.body.style.paddingBottom = ''; return; }
     if (existing && existing.dataset.text === text) return;
     existing?.remove();
 
     const n = document.createElement('div');
-    n.className = 'tile-narr';
+    // restored-from-history lines start tucked: they are context, not news
+    n.className = 'tile-narr' + (narrationRestored ? ' tucked instant' : '');
     n.dataset.text = text;
     n.innerHTML = `<img src="chameleon.png" alt=""><span></span><button class="narr-x" title="Dismiss">×</button>`;
     t.el.appendChild(n);
+    // reserve room so the speech bubble never sits on top of the content
+    const reserve = () => { t.body.style.paddingBottom = n.classList.contains('tucked') ? '' : (n.offsetHeight + 16) + 'px'; };
+    requestAnimationFrame(reserve);
+
+    /* After a while it tucks itself into a small avatar in the corner rather
+       than sitting on the content forever — hover or click to read it again.
+       Nothing is lost, nothing is permanently covered. */
+    const tuck = () => { n.classList.add('tucked'); t.body.style.paddingBottom = ''; };
+    clearTimeout(t.narrTuck);
+    t.narrTuck = setTimeout(tuck, Math.min(5000 + text.length * 45, 14000));
+    n.onclick = e => {
+      if (e.target.closest('.narr-x')) return;
+      clearTimeout(t.narrTuck);
+      n.classList.toggle('tucked');
+      requestAnimationFrame(reserve);
+      if (!n.classList.contains('tucked')) t.narrTuck = setTimeout(tuck, 9000);
+    };
     n.querySelector('.narr-x').onclick = e => {
       e.stopPropagation();
+      clearTimeout(t.narrTuck);
       delete state.narration[appId];
       n.classList.add('out');
+      t.body.style.paddingBottom = '';
       setTimeout(() => n.remove(), 300);
     };
     const span = n.querySelector('span');
+    clearInterval(t.narrTimer);
+    if (n.classList.contains('tucked')) { span.textContent = text; return; }
     let i = 0;
     const step = Math.max(1, Math.round(text.length / 45));
-    clearInterval(t.narrTimer);
     t.narrTimer = setInterval(() => {
       i += step;
       span.textContent = text.slice(0, i);

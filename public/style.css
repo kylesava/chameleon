@@ -22,6 +22,13 @@
   --sh-md: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 10px 30px rgba(0, 0, 0, 0.35);
   --sh-lg: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 60px rgba(0, 0, 0, 0.55);
   --ease-spring: cubic-bezier(0.24, 1.04, 0.34, 1);
+  /* Motion vocabulary. Things ENTER with a little overshoot and LEAVE quickly
+     and quietly — arrival deserves attention, departure does not. */
+  --ease-out: cubic-bezier(0.16, 0.9, 0.28, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.85, 0.3);
+  --t-in: 380ms;
+  --t-out: 200ms;
+  --t-move: 300ms;
   --tile-t: 560ms;
   --r: 14px;
   --dock-w: min(720px, 92vw);
@@ -218,9 +225,19 @@ body.place-mini  #workspace { bottom: 74px; }
 }
 .tile:hover::before, .tile:hover::after { opacity: 1; }
 .tile.focus { border-color: hsl(var(--h) 70% 62% / 0.55); box-shadow: var(--sh-md), 0 0 0 3px hsl(var(--h) 80% 60% / 0.1), 0 0 30px hsl(var(--h) 80% 60% / 0.08); }
-.tile.enter { transform: translateY(10px) scale(0.985); opacity: 0; }
+.tile.enter { transform: translateY(14px) scale(0.97); opacity: 0; }
 .tile.suppressed { opacity: 0.12; filter: saturate(0.3); pointer-events: none; }
-.tile.exit { transform: scale(0.97); opacity: 0; }
+.tile.exit {
+  transform: scale(0.94) translateY(-4px); opacity: 0; pointer-events: none;
+  transition: transform var(--t-out) var(--ease-in), opacity var(--t-out) var(--ease-in);
+}
+/* a tile the agent just touched gets a brief edge-light, so your eye follows */
+.tile.pulse::after { animation: tilepulse 900ms var(--ease-out); }
+@keyframes tilepulse {
+  0% { opacity: 0; }
+  35% { opacity: 1; }
+  100% { opacity: 0; }
+}
 
 .tile-head { flex: 0 0 36px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 13px; user-select: none; cursor: grab; }
 .tile-ico { width: 14px; height: 14px; color: hsl(var(--h) 75% 68%); }
@@ -269,9 +286,42 @@ body.tiledrag .tile:not(.drag) { pointer-events: none; }
   animation: pulse 1.2s ease-in-out infinite;
 }
 
+/* ============ shared motion ============
+   One vocabulary for everything that appears or disappears, so the workspace
+   feels like a single object rather than a collection of widgets. */
+@keyframes rise { from { opacity: 0; transform: translateY(9px) scale(0.985); } }
+@keyframes fall { to { opacity: 0; transform: translateY(-6px) scale(0.985); } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } }
+@keyframes slideOut { to { opacity: 0; transform: translateX(14px); } }
+@keyframes popIn { from { opacity: 0; transform: scale(0.9); } }
+@keyframes sheen { to { background-position: 200% 0; } }
+
+.enter-rise { animation: rise var(--t-in) var(--ease-out) backwards; }
+.leave-fall { animation: fall var(--t-out) var(--ease-in) forwards; pointer-events: none; }
+.leave-slide { animation: slideOut var(--t-out) var(--ease-in) forwards; pointer-events: none; }
+
+/* rows that arrive in a list stagger just enough to read as a sequence */
+.stagger > * { animation: rise var(--t-in) var(--ease-out) backwards; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(n+6) { animation-delay: 200ms; }
+
 /* content arriving live: each item lands as it is written */
-.born { animation: born 340ms var(--ease-spring) backwards; }
+.born { animation: rise var(--t-in) var(--ease-out) backwards; }
 @keyframes born { from { opacity: 0; transform: translateY(7px); } }
+
+/* Anyone who asks for less motion gets the state changes without the travel. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 .draft-root { height: 100%; overflow-y: auto; padding: 12px 14px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 .draft-items { display: flex; flex-direction: column; gap: 4px; }
 .draft-head { margin-bottom: 8px; }
@@ -324,6 +374,25 @@ body.tiledrag .tile:not(.drag) { pointer-events: none; }
 }
 .tile-narr img { width: 20px; height: 20px; flex: 0 0 auto; margin-top: 1px; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5)); }
 .tile-narr span { flex: 1; min-width: 0; }
+.tile-narr { cursor: pointer; transition: left var(--t-move) var(--ease-out), padding var(--t-move) var(--ease-out), border-radius var(--t-move) var(--ease-out), background var(--t-move) ease; }
+
+/* tucked: a small avatar in the corner, holding the line until you want it */
+.tile-narr.tucked {
+  left: auto; padding: 7px; border-radius: 999px;
+  border-left-width: 1px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+.tile-narr.tucked span, .tile-narr.tucked .narr-x { display: none; }
+.tile-narr.tucked img { width: 18px; height: 18px; margin: 0; }
+.tile-narr.tucked::after {
+  content: ''; position: absolute; inset: -3px; border-radius: inherit;
+  border: 1px solid hsl(var(--h) 75% 62% / 0.35);
+  animation: tuckedping 2.6s var(--ease-out) infinite;
+  pointer-events: none;
+}
+@keyframes tuckedping { 0% { opacity: 0.9; transform: scale(1); } 60%, 100% { opacity: 0; transform: scale(1.35); } }
+.tile-narr.tucked:hover { background: hsl(var(--h) 60% 55% / 0.22); }
+.tile-narr.instant { animation: none; }
 .narr-x {
   flex: 0 0 auto; width: 18px; height: 18px; margin: -1px -3px 0 0;
   border: 0; background: transparent; color: var(--text-faint);
@@ -545,9 +614,10 @@ body:not(.has-msgs) #chat-log-wrap { display: none; }
 }
 body.place-left #chat-log, body.place-right #chat-log { max-height: none; }
 
-.msg { max-width: 88%; display: flex; flex-direction: column; align-self: flex-start; align-items: flex-start; animation: msg-in 380ms var(--ease-spring); }
-.msg.user { align-self: flex-end; align-items: flex-end; }
-@keyframes msg-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+.msg { max-width: 88%; display: flex; flex-direction: column; align-self: flex-start; align-items: flex-start; animation: msg-in var(--t-in) var(--ease-out); }
+.msg.user { align-self: flex-end; align-items: flex-end; animation-name: msgInUser; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+@keyframes msgInUser { from { opacity: 0; transform: translateY(10px) translateX(8px) scale(0.97); } }
 .bubble { padding: 9px 13px; border-radius: 14px; font-size: 13px; line-height: 1.55; word-wrap: break-word; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
 .msg.user .bubble { background: var(--accent); border-color: transparent; color: #fff; border-bottom-right-radius: 5px; }
 .msg.agent .bubble { color: var(--text); border-bottom-left-radius: 5px; }
@@ -679,7 +749,9 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
   transition: background 140ms ease, opacity 220ms ease, transform 220ms ease;
 }
 .plan-task:hover { background: var(--fill-1); }
-.plan-task.removing { opacity: 0; transform: translateX(-10px); }
+.plan-task.removing { animation: slideOut var(--t-out) var(--ease-in) forwards; pointer-events: none; }
+.plan-body .plan-task { animation: rise var(--t-in) var(--ease-out) backwards; }
+.plan-live { animation: rise var(--t-in) var(--ease-out); }
 .pt-tick { cursor: pointer; display: block; }
 /* the checkbox is an override, not the mechanism: hidden until you reach for it */
 .plan-task input { position: absolute; opacity: 0; width: 16px; height: 16px; left: 7px; top: 7px; margin: 0; cursor: pointer; }
@@ -734,9 +806,11 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 .src {
   display: flex; align-items: center; gap: 9px;
   border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
-  transition: border-color 150ms ease;
+  transition: border-color 150ms ease, background 150ms ease;
+  animation: rise var(--t-in) var(--ease-out) backwards;
 }
-.src:hover { border-color: var(--line-2); }
+.src:hover { border-color: var(--line-2); background: var(--fill-1); }
+.src.removing { animation: slideOut var(--t-out) var(--ease-in) forwards; pointer-events: none; }
 .src > i { font-style: normal; font-size: 12px; opacity: 0.7; }
 .src-main { flex: 1; min-width: 0; cursor: pointer; }
 .src-main b { display: block; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -784,7 +858,8 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 
 /* generated illustration */
 .genimg { margin: 12px 0; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); }
-.genimg img { display: block; width: 100%; height: auto; animation: msg-in 460ms var(--ease-spring); }
+.genimg img { display: block; width: 100%; height: auto; animation: imgIn 620ms var(--ease-out); }
+@keyframes imgIn { from { opacity: 0; transform: scale(1.03); filter: blur(6px); } }
 .genimg figcaption { padding: 7px 11px; font-size: 10.5px; color: var(--text-faint); border-top: 1px solid var(--line); }
 .genimg-wait {
   aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; gap: 9px;
@@ -829,10 +904,12 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 .viz.viz-error .viz-fallback { display: block; }
 .viz.viz-error { border-color: rgba(240, 168, 60, 0.35); }
 .viz.viz-error::before {
-  content: 'diagram source'; display: block; text-align: left;
+  content: 'source'; display: block; text-align: left;
   font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
   color: var(--warn); margin-bottom: 5px;
 }
+.viz.mermaid-src.viz-error::before { content: 'diagram source'; }
+.viz.chart-src.viz-error::before { content: 'chart source'; }
 .katex { font-size: 1.02em; }
 .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
 pre.code.streaming { opacity: 0.75; }
@@ -940,7 +1017,13 @@ pre.code[data-lang]::after {
   padding: 8px 10px; outline: none;
 }
 .qq-t:focus { border-color: var(--accent); }
-.qq-ex { margin-top: 6px; font-size: 11px; line-height: 1.5; padding: 6px 9px; border-radius: 8px; }
+.qq-ex { margin-top: 6px; font-size: 11px; line-height: 1.5; padding: 6px 9px; border-radius: 8px; animation: rise var(--t-in) var(--ease-out) backwards; }
+.qq-c { animation: none; }
+/* the graded state lands one question at a time */
+.quiz .qq:nth-child(2) .qq-ex { animation-delay: 60ms; }
+.quiz .qq:nth-child(3) .qq-ex { animation-delay: 120ms; }
+.quiz .qq:nth-child(4) .qq-ex { animation-delay: 180ms; }
+.quiz-score { animation: popIn var(--t-in) var(--ease-out) 140ms backwards; }
 .qq-ex.ok { color: var(--good); background: rgba(60, 226, 165, 0.06); }
 .qq-ex.no { color: #ffb4c9; background: rgba(255, 95, 143, 0.06); }
 .quiz-go { margin-top: 4px; }
@@ -978,8 +1061,10 @@ pre.code[data-lang]::after {
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
   padding: 22px 26px;
   scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
-  animation: msg-in 320ms var(--ease-spring);
+  animation: slideAdvance 340ms var(--ease-out);
 }
+@keyframes slideAdvance { from { opacity: 0; transform: translateX(14px); } }
+.deck-slide .sl > * { animation: rise 420ms var(--ease-out) 60ms backwards; }
 .sl { height: 100%; display: flex; flex-direction: column; }
 .sl h1 { font-size: clamp(20px, 3.4vw, 40px); font-weight: 600; letter-spacing: -0.6px; line-height: 1.15; }
 .sl h2 {
@@ -1111,7 +1196,7 @@ pre.code[data-lang]::after {
   transition: background 130ms ease, color 130ms ease;
 }
 .pod-ln:hover { background: var(--fill-1); color: var(--text); }
-.pod-ln.on { background: rgba(255, 105, 180, 0.08); color: var(--text); }
+.pod-ln.on { background: hsl(var(--h, 330) 70% 60% / 0.1); color: var(--text); box-shadow: inset 2px 0 0 hsl(var(--h, 330) 80% 65% / 0.7); }
 .pod-ln em {
   flex: 0 0 auto; font-style: normal; font: 600 8.5px 'IBM Plex Mono', monospace;
   border-radius: 5px; padding: 1.5px 5px; margin-top: 1px;

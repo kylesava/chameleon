@@ -52,7 +52,20 @@ function makeApi(store) {
     return !inflight.has(sessionId);
   }
 
+  /* Every API route answers with JSON, including when it fails. Without this
+     a malformed body escaped to the generic handler and came back as a
+     plain-text 500, which the client then couldn't parse into a message. */
   async function handle(req, res, pathname, query) {
+    try {
+      return await route(req, res, pathname, query);
+    } catch (e) {
+      if (res.headersSent) { try { res.end(); } catch {} return; }
+      const bad = /bad json|bad status|required|invalid/i.test(e.message || '');
+      return json(res, bad ? 400 : 500, { error: e.message || 'server error' });
+    }
+  }
+
+  async function route(req, res, pathname, query) {
     /* ---------- bootstrap ---------- */
     if (req.method === 'GET' && pathname === '/api/state') {
       /* A plain load always starts fresh — no resuming half an old lesson.
@@ -128,6 +141,9 @@ function makeApi(store) {
           store, sessionId,
           userContent: String(b.content).slice(0, 24000),
           kind: b.kind === 'event' ? 'event' : 'chat',
+          // what the learner should see for this event in the transcript —
+          // the raw description is written for the model, not for them
+          label: b.label ? String(b.label).slice(0, 120) : null,
           emit, signal: ac.signal, layout,
         });
         emit({ t: 'done' });

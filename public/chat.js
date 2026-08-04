@@ -173,7 +173,8 @@
     log.innerHTML = '';
     for (const m of messages) {
       if (m.kind === 'narration') addNarration(m.app, m.content);
-      else if (m.kind === 'event') addChip(firstLine(m.content).replace(/^\[UI EVENT\]\s*/, '').slice(0, 90), 'pointer');
+      // events show their saved learner-facing label, never the model-facing text
+      else if (m.kind === 'event') addChip(m.app || tidyEvent(m.content), 'pointer');
       else if (m.role === 'user') addUser(m.content);
       else addAgent(m.content);
     }
@@ -183,6 +184,14 @@
     scroll();
   }
   const firstLine = s => String(s).split('\n')[0];
+  /* Fallback for events saved before labels existed: strip the marker and any
+     internal ids so the transcript never shows plumbing. */
+  const tidyEvent = s => firstLine(s)
+    .replace(/^\[UI EVENT\]\s*(The user\s*)?/i, '')
+    .replace(/\s*\(artifact #\d+\)/gi, '')
+    .replace(/\s*#\d+/g, '')
+    .replace(/\.$/, '')
+    .slice(0, 80) || 'Interacted';
 
   /* ---- streaming reply bubble ---- */
   function saySink(delta) {
@@ -220,7 +229,12 @@
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         signal: abortCtl.signal,
-        body: JSON.stringify({ session_id: CFG.sessionId(), content, kind: kind || 'chat' }),
+        body: JSON.stringify({
+          session_id: CFG.sessionId(),
+          content,
+          kind: kind || 'chat',
+          label: kind === 'event' ? (chipInfo?.label || null) : null,
+        }),
       });
       const ctype = res.headers.get('content-type') || '';
       if (!res.ok || ctype.includes('application/json')) {

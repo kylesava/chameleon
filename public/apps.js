@@ -206,7 +206,7 @@
       row.classList.add('removing');
       try {
         const r = await CTX.api(`/api/task/${id}?session=${CTX.sessionId()}`, null, 'DELETE');
-        if (r.plan) CTX.planChanged(r.plan);
+        if (r.plan) setTimeout(() => CTX.planChanged(r.plan), 180); // finish leaving first
       } catch { row.classList.remove('removing'); }
     });
 
@@ -245,13 +245,13 @@
     el.innerHTML = `
       <div class="srcs">
         <div class="srcs-list">
+          ${!sources.length ? `<div class="app-empty">${icon('sources')}<span>Nothing here yet. Add what you're studying — I'll teach from it.</span></div>` : ''}
           ${sources.length ? sources.map(s => `
             <div class="src" data-s="${s.id}">
               <i>${kindIco(s.kind)}</i>
               <div class="src-main"><b>${esc(s.title)}</b><span>${esc(short(s.content.replace(/\s+/g, ' ').slice(0, 90)))}</span></div>
               <button class="src-del" title="Remove">×</button>
-            </div>`).join('')
-    : '<div class="srcs-none">Nothing here yet. Add what you\'re studying — I\'ll teach from it.</div>'}
+            </div>`).join('') : ''}
         </div>
         ${app.ui.adding === 'text' ? `
           <div class="src-add">
@@ -299,9 +299,11 @@
       }
     });
     el.querySelectorAll('.src-del').forEach(b => b.onclick = async () => {
-      const id = Number(b.closest('.src').dataset.s);
+      const row = b.closest('.src');
+      const id = Number(row.dataset.s);
+      row.classList.add('removing'); // let it leave before the list reflows
       try { await CTX.api(`/api/source/${id}`, null, 'DELETE'); } catch {}
-      CTX.sourceRemoved(id);
+      setTimeout(() => CTX.sourceRemoved(id), 180);
     });
     el.querySelectorAll('.src-main').forEach(d => d.onclick = () => {
       const id = Number(d.closest('.src').dataset.s);
