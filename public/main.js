@@ -93,6 +93,18 @@
   }
   renderSessions();
   sessBtn.onclick = e => { e.stopPropagation(); document.getElementById('sessmenu').classList.toggle('open'); };
+
+  /* The logo is the reset: drop every scrap of local state and come back on a
+     clean session with freshly-fetched assets. A development convenience for
+     now — it does not delete past journeys from the server. */
+  document.getElementById('brand-mark').onclick = async () => {
+    try { localStorage.clear(); sessionStorage.clear(); } catch {}
+    try {
+      if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+    } catch {}
+    // a changing query defeats any cached HTML on the way back in
+    location.replace(location.pathname + '?fresh=' + Date.now());
+  };
   document.addEventListener('click', e => {
     if (!e.target.closest('#sessmenu')) document.getElementById('sessmenu').classList.remove('open');
     if (!e.target.closest('#appsmenu')) document.getElementById('appsmenu').classList.remove('open');
@@ -150,11 +162,23 @@
        not a new step competing for attention. */
     if (ev.t === 'tool_start') { beginDrafting(ev); return; }
     if (ev.t === 'draft') { applyDraft(ev); return; }
+    if (ev.t === 'thinking') { showThinking(ev.d); return; }
     queue.push(ev);
     if (!playing) playQueue();
   }
 
+  /* The model reasoning out loud, shown in the composer strip as it forms.
+     Keeps only the newest sentence — this is a pulse, not a transcript. */
+  let thinkBuf = '';
+  function showThinking(delta) {
+    thinkBuf += delta;
+    const parts = thinkBuf.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+    const latest = (parts[parts.length - 1] || '').trim();
+    if (latest.length > 2) Chat.setStatus(latest.length > 120 ? latest.slice(0, 118) + '…' : latest, true);
+  }
+
   function beginDrafting(ev) {
+    thinkBuf = '';
     if (ev.status) setStatus(ev.app, ev.status);
     if (!ev.app) return;
     state.draft = { app: ev.app, field: ev.field || null, items: [] };
@@ -225,7 +249,9 @@
       }
       document.body.classList.add('acting'); // history yields to the workspace
       playStep(ev);
-      await sleep(ev.t === 'narrate' ? 1500 : 700);
+      // One thing at a time still, but paced to feel immediate. Narration gets
+      // a beat to be read; a layout change just needs to register.
+      await sleep(ev.t === 'narrate' ? 900 : queue.length > 2 ? 180 : 360);
     }
     playing = false;
   }
@@ -338,6 +364,7 @@
 
   /* ---------------- layout + tile DOM (carried from the POC) ---------------- */
   const DOCK_W = 400; // keep in sync with --dock-side-w in style.css
+  const MINI_H = 60;  // the minimised pill's footprint (see body.place-mini)
   function metrics() {
     const r = stage.getBoundingClientRect();
     const centered = document.body.classList.contains('chat-center');
@@ -348,7 +375,7 @@
       // a side dock takes its own column; the centre dock reserves a bottom strip
       if (place === 'left' || place === 'right') width -= DOCK_W + 12;
       else if (place !== 'mini') height -= 92;
-      else height -= 26;
+      else height -= MINI_H;
     }
     return {
       cw: (width - GAP * (GRID.cols - 1)) / GRID.cols,

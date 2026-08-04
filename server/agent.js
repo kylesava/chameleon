@@ -161,7 +161,12 @@ async function streamMessage(body, signal, onTextDelta, onEvent = () => {}) {
               }
             }
           }
-          else if (d.type === 'thinking_delta') b.thinking = (b.thinking || '') + d.thinking;
+          else if (d.type === 'thinking_delta') {
+            b.thinking = (b.thinking || '') + d.thinking;
+            // Surface reasoning as it forms: the seconds before the first tool
+            // call were the deadest part of a turn.
+            onEvent({ t: 'thinking', d: d.thinking });
+          }
           else if (d.type === 'signature_delta') b.signature = (b.signature || '') + d.signature;
           break;
         }
@@ -236,6 +241,8 @@ async function runTurn(opts) {
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
       tools: TOOLS,
       messages: msgs,
+      // summarised reasoning drives the live status line while the model works
+      thinking: { type: 'adaptive', display: 'summarized' },
     };
     // Safety-classifier declines re-run on the recommended fallback model.
     if (FALLBACKS) body.fallbacks = 'default';

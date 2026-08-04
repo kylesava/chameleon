@@ -62,8 +62,15 @@ body::after {
   z-index: 30;
 }
 #brand { display: flex; align-items: center; flex: 0 0 auto; }
-#brand-mark { width: 34px; height: 34px; }
+#brand-mark {
+  width: 34px; height: 34px; padding: 0;
+  border: 0; background: transparent; cursor: pointer;
+  border-radius: 9px;
+  transition: transform 200ms var(--ease-spring), filter 200ms ease;
+}
 #brand-mark img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
+#brand-mark:hover { transform: rotate(-8deg) scale(1.08); }
+#brand-mark:active { transform: scale(0.94); }
 #topspacer { flex: 1; }
 
 /* session switcher */
@@ -148,7 +155,7 @@ body.chat-center #workspace { opacity: 0; pointer-events: none; }
 /* a side dock takes its own column; minimised gives the canvas nearly everything */
 body.place-left  #workspace { left: calc(var(--dock-side-w) + 26px); right: 14px; bottom: 14px; }
 body.place-right #workspace { right: calc(var(--dock-side-w) + 26px); left: 14px; bottom: 14px; }
-body.place-mini  #workspace { bottom: 40px; }
+body.place-mini  #workspace { bottom: 74px; }
 #canvas {
   position: relative; width: 100%; height: 100%;
   background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.3px);
@@ -388,8 +395,10 @@ body.place-left #chat-log-wrap,
 body.place-right #chat-log-wrap { flex: 1 1 auto; }
 
 /* minimised: a sliver you can still type into */
+/* Minimised sits below the canvas rather than over it, so it can't cover a
+   tile's narration. */
 body.place-mini #chatdock {
-  left: auto; right: 16px; bottom: 12px;
+  left: auto; right: 16px; bottom: 8px;
   width: 300px;
   cursor: pointer;
 }
@@ -467,9 +476,13 @@ body.dragging { user-select: none; }
 body.has-status #chat-status { display: flex; animation: msg-in 260ms var(--ease-spring); }
 body.chat-center #chat-status { justify-content: center; }
 #chat-status i {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: 0 0 auto;
   animation: pulse 1.2s ease-in-out infinite;
 }
+#chat-status span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* reasoning reads as an aside, not as a statement of fact */
+#chat-status.thinking { color: var(--text-faint); font-style: italic; }
+#chat-status.thinking i { background: var(--text-faint); }
 
 #hero { display: none; text-align: center; padding: 0 20px 26px; }
 body.chat-center #hero { display: block; animation: hero-in 700ms var(--ease-spring); }

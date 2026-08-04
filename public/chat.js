@@ -116,8 +116,9 @@
 
   /* ---------------- ephemeral status (commandment 7) ----------------
      Shown while the agent works; never written to history. */
-  function setStatus(text) {
+  function setStatus(text, thinking) {
     statusEl.querySelector('span').textContent = text || '';
+    statusEl.classList.toggle('thinking', !!thinking);
     document.body.classList.toggle('has-status', !!text);
   }
 
