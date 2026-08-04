@@ -213,16 +213,64 @@ const TOOL_STATUS = {
   add_note: 'Adding a note…',
 };
 
-/* Pull complete objects out of a partial JSON string mid-stream. Returns every
-   finished element of `field`'s array so far; the caller tracks how many it has
-   already shown. Tolerates the truncated tail — that's the whole point. */
+/* Repair a truncated JSON object so the part that HAS arrived can be read:
+   close an open string, drop a dangling key or comma, close open brackets.
+   Returns null if nothing coherent can be salvaged yet. */
+function repairPartial(src) {
+  let inStr = false, esc = false;
+  const stack = [];
+  const cuts = []; // safe places to trim back to: commas between this object's own fields
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']');
+    else if (c === '}' || c === ']') stack.pop();
+    else if (c === ',' && stack.length === 1) cuts.push(i);
+  }
+  let body = src;
+  if (esc) body = body.slice(0, -1);
+  let close = stack.slice().reverse().join('');
+  for (let attempt = 0; ; attempt++) {
+    const candidate = body + (inStr && attempt === 0 ? '"' : '') + close;
+    try {
+      const v = JSON.parse(candidate);
+      if (v && typeof v === 'object') return v;
+    } catch {}
+    // trim back past the field that is still arriving and try again
+    const cut = cuts.pop();
+    if (cut === undefined) return null;
+    body = src.slice(0, cut);
+    inStr = false;
+    close = '}';
+  }
+}
+
+/* Read the tool input WHILE it is still arriving.
+   Returns { head, items }: `head` is the top-level scalar fields that have
+   landed (a title, say), `items` is every element of `field`'s array — the
+   last one flagged `_partial` when it is still being written, so the UI can
+   show a heading and its body filling in rather than waiting for the object
+   to close. Text arrives in real time; nothing is ever shown as final early. */
 function draftScan(partialJson, field) {
+  const out = { head: {}, items: [] };
   const key = `"${field}"`;
   const k = partialJson.indexOf(key);
-  if (k < 0) return [];
+
+  // top-level scalars that precede the array (e.g. "title")
+  const headSrc = k >= 0 ? partialJson.slice(0, k).replace(/,\s*$/, '') : partialJson;
+  const head = repairPartial(headSrc.startsWith('{') ? headSrc : '{' + headSrc);
+  if (head) for (const [kk, v] of Object.entries(head)) if (v !== null && typeof v !== 'object') out.head[kk] = v;
+
+  if (k < 0) return out;
   const start = partialJson.indexOf('[', k);
-  if (start < 0) return [];
-  const out = [];
+  if (start < 0) return out;
+
   let depth = 0, inStr = false, esc = false, objStart = -1;
   for (let i = start + 1; i < partialJson.length; i++) {
     const c = partialJson[i];
@@ -237,10 +285,17 @@ function draftScan(partialJson, field) {
     else if (c === '}') {
       depth--;
       if (depth === 0 && objStart >= 0) {
-        try { out.push(JSON.parse(partialJson.slice(objStart, i + 1))); } catch {}
+        try { out.items.push(JSON.parse(partialJson.slice(objStart, i + 1))); } catch {}
         objStart = -1;
       }
-    } else if (c === ']' && depth === 0) break;
+    } else if (c === ']' && depth === 0) { objStart = -1; break; }
+  }
+  // The element still being written. Only surfaced once it carries something
+  // readable — an object whose first key hasn't landed yet would appear and
+  // then vanish, making the list flicker.
+  if (objStart >= 0) {
+    const partial = repairPartial(partialJson.slice(objStart));
+    if (partial && Object.keys(partial).length) out.items.push({ ...partial, _partial: true });
   }
   return out;
 }

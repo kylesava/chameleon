@@ -128,7 +128,7 @@ async function streamMessage(body, signal, onTextDelta, onEvent = () => {}) {
           if (ev.content_block.type === 'tool_use') {
             const b = blocks[ev.index];
             b._json = '';
-            b._drafted = 0;
+            b._drafted = '';
             const spec = DRAFTABLE[b.name];
             // Announce before a single byte of content exists.
             onEvent({
@@ -149,10 +149,13 @@ async function streamMessage(body, signal, onTextDelta, onEvent = () => {}) {
             b._json += d.partial_json;
             const spec = DRAFTABLE[b.name];
             if (spec) {
-              const items = draftScan(b._json, spec.field);
-              if (items.length > b._drafted) {
-                onEvent({ t: 'draft', app: spec.app, field: spec.field, items: items.slice(b._drafted), index: b._drafted });
-                b._drafted = items.length;
+              // Full snapshot each time (replace semantics) — the trailing item
+              // grows as its text arrives, so the client can render it live.
+              const { head, items } = draftScan(b._json, spec.field);
+              const sig = items.length + ':' + JSON.stringify(items[items.length - 1] || null).length + ':' + JSON.stringify(head).length;
+              if (sig !== b._drafted) {
+                b._drafted = sig;
+                onEvent({ t: 'draft', app: spec.app, field: spec.field, head, items });
               }
             }
           }

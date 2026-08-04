@@ -46,6 +46,7 @@
     // minimised implies hidden history; otherwise honour the user's toggle
     document.body.classList.toggle('chat-collapsed', collapsed || place === 'mini');
     collapseBtn.title = collapsed ? 'Show the conversation' : 'Hide the conversation';
+    collapseBtn.setAttribute('aria-expanded', String(!collapsed));
   }
   function setCollapsed(v) {
     collapsed = v;
@@ -74,8 +75,10 @@
     stage.appendChild(z);
     zones[id] = z;
   }
-  document.getElementById('chat-grip').addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
+  // the whole bar is the handle, not just the dots — that's what people grab
+  document.getElementById('chat-bar').addEventListener('mousedown', e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    if (document.body.classList.contains('acting')) return; // don't move it mid-action
     e.preventDefault();
     const sr = stage.getBoundingClientRect();
     let moved = false, target = place;

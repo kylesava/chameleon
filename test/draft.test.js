@@ -2,74 +2,111 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { draftScan, DRAFTABLE, TOOLS } = require('../server/tools.js');
 
-/* draftScan reads a tool input that is still arriving: it must return every
-   COMPLETE element so far and never a half-written one. */
+/* draftScan reads a tool input that is still arriving. Complete elements come
+   back as-is; the element still being written comes back flagged _partial with
+   whatever text has landed, so a lesson body can be watched filling in. */
 
-test('returns nothing until the first object closes', () => {
-  assert.deepEqual(draftScan('{"title":"Quiz","questions":[', 'questions'), []);
-  assert.deepEqual(draftScan('{"title":"Quiz","questions":[{"type":"mc","prompt":"Why', 'questions'), []);
+test('the element being written streams out, flagged partial', () => {
+  const s = '{"title":"Lesson","sections":[{"heading":"Intro","body":"GPS is a stopwa';
+  const { items } = draftScan(s, 'sections');
+  assert.equal(items.length, 1);
+  assert.equal(items[0].heading, 'Intro');
+  assert.equal(items[0].body, 'GPS is a stopwa');
+  assert.equal(items[0]._partial, true);
 });
 
-test('returns each object as it completes', () => {
-  const a = '{"title":"Q","questions":[{"type":"mc","prompt":"one"}';
-  assert.deepEqual(draftScan(a, 'questions'), [{ type: 'mc', prompt: 'one' }]);
-  const b = a + ',{"type":"free","prompt":"two"}';
-  assert.deepEqual(draftScan(b, 'questions').map(q => q.prompt), ['one', 'two']);
-  const c = b + ',{"type":"mc","prompt":"thr';
-  assert.deepEqual(draftScan(c, 'questions').map(q => q.prompt), ['one', 'two'], 'partial tail excluded');
+test('partial text grows across deltas and is never truncated backwards', () => {
+  const base = '{"sections":[{"heading":"H","body":"';
+  let prev = '';
+  for (const chunk of ['a', 'ab', 'abc', 'abcd efg', 'abcd efg hij']) {
+    const { items } = draftScan(base + chunk, 'sections');
+    assert.equal(items[0].body, chunk);
+    assert.ok(chunk.startsWith(prev), 'text only ever extends');
+    prev = chunk;
+  }
 });
 
-test('handles nested objects and arrays inside an element', () => {
-  const s = '{"questions":[{"prompt":"p","choices":["a","b"],"meta":{"x":{"y":1}},"answer_index":1}';
-  const out = draftScan(s, 'questions');
-  assert.equal(out.length, 1);
-  assert.deepEqual(out[0].choices, ['a', 'b']);
-  assert.equal(out[0].meta.x.y, 1);
+test('a completed element loses the partial flag', () => {
+  const done = '{"sections":[{"heading":"Intro","body":"all of it"}';
+  const { items } = draftScan(done, 'sections');
+  assert.equal(items[0]._partial, undefined);
+  assert.equal(items[0].body, 'all of it');
 });
 
-test('braces and brackets inside strings do not confuse it', () => {
-  const s = '{"questions":[{"prompt":"use {a} and [b] now"}';
-  assert.deepEqual(draftScan(s, 'questions'), [{ prompt: 'use {a} and [b] now' }]);
+test('top-level scalars (the title) surface before the array completes', () => {
+  const { head } = draftScan('{"title":"How GPS works","sections":[{"heading":"a', 'sections');
+  assert.equal(head.title, 'How GPS works');
 });
 
-test('escaped quotes and backslashes inside strings are handled', () => {
-  const s = '{"questions":[{"prompt":"say \\"hi\\" then \\\\ done"}';
-  const out = draftScan(s, 'questions');
-  assert.equal(out.length, 1);
-  assert.equal(out[0].prompt, 'say "hi" then \\ done');
+test('a half-written key is dropped rather than shown as garbage', () => {
+  const { items } = draftScan('{"sections":[{"heading":"Intro","bod', 'sections');
+  assert.equal(items.length, 1);
+  assert.equal(items[0].heading, 'Intro');
+  assert.ok(!('bod' in items[0]));
+});
+
+test('a dangling comma or colon does not break the read', () => {
+  for (const tail of ['{"heading":"Intro",', '{"heading":"Intro","body":', '{"heading":"Intro","body":"']) {
+    const { items } = draftScan('{"sections":[' + tail, 'sections');
+    assert.equal(items[0].heading, 'Intro');
+  }
+});
+
+test('escaped quotes and braces inside the streaming text stay intact', () => {
+  const s = '{"sections":[{"body":"he said \\"hi\\" and {braces} and \\\\ too';
+  const { items } = draftScan(s, 'sections');
+  assert.equal(items[0].body, 'he said "hi" and {braces} and \\ too');
+});
+
+test('multiple completed elements plus a partial tail', () => {
+  const s = '{"questions":[{"prompt":"one"},{"prompt":"two"},{"prompt":"thr';
+  const { items } = draftScan(s, 'questions');
+  assert.deepEqual(items.map(q => q.prompt), ['one', 'two', 'thr']);
+  assert.equal(items[0]._partial, undefined);
+  assert.equal(items[2]._partial, true);
+});
+
+test('nested structures inside an element survive', () => {
+  const s = '{"questions":[{"prompt":"p","choices":["a","b"],"answer_index":1}';
+  const { items } = draftScan(s, 'questions');
+  assert.deepEqual(items[0].choices, ['a', 'b']);
+  assert.equal(items[0].answer_index, 1);
 });
 
 test('stops at the end of the target array', () => {
   const s = '{"questions":[{"prompt":"one"}],"other":[{"prompt":"nope"}]}';
-  assert.deepEqual(draftScan(s, 'questions').map(q => q.prompt), ['one']);
+  const { items } = draftScan(s, 'questions');
+  assert.deepEqual(items.map(q => q.prompt), ['one']);
 });
 
-test('missing field or absent array yields nothing', () => {
-  assert.deepEqual(draftScan('{"title":"x"}', 'questions'), []);
-  assert.deepEqual(draftScan('', 'questions'), []);
-  assert.deepEqual(draftScan('{"questions"', 'questions'), []);
+test('missing field or empty input yields nothing', () => {
+  assert.deepEqual(draftScan('{"title":"x"}', 'questions').items, []);
+  assert.deepEqual(draftScan('', 'questions').items, []);
+  assert.deepEqual(draftScan('{"questions"', 'questions').items, []);
 });
 
-test('a field that precedes the array in the payload is skipped correctly', () => {
-  const s = '{"artifact_id":7,"title":"Deck","cards":[{"q":"a","a":"b"}';
-  assert.deepEqual(draftScan(s, 'cards'), [{ q: 'a', a: 'b' }]);
-});
-
-test('replaying a full stream one character at a time never yields a partial item', () => {
+test('replaying a full stream one character at a time stays coherent', () => {
   const full = JSON.stringify({
     title: 'Deck',
     cards: [{ q: 'q1', a: 'a1' }, { q: 'q2 with "quotes"', a: 'a2 {braces}' }, { q: 'q3', a: 'a3' }],
   });
-  let seen = 0;
+  let count = 0;
   for (let i = 1; i <= full.length; i++) {
-    const items = draftScan(full.slice(0, i), 'cards');
-    assert.ok(items.length >= seen, 'item count must never go backwards');
+    const { items } = draftScan(full.slice(0, i), 'cards');
+    assert.ok(items.length >= count, 'item count never goes backwards');
+    count = items.length;
     for (const it of items) {
-      assert.ok(typeof it.q === 'string' && typeof it.a === 'string', 'every emitted item is complete');
+      // every key present must hold a usable value, partial or not
+      for (const [k, v] of Object.entries(it)) {
+        if (k === '_partial') continue;
+        assert.ok(typeof v === 'string', `${k} is readable text`);
+      }
     }
-    seen = items.length;
   }
-  assert.equal(seen, 3);
+  const final = draftScan(full, 'cards');
+  assert.equal(final.items.length, 3);
+  assert.ok(final.items.every(i => !i._partial), 'nothing is left flagged partial once complete');
+  assert.equal(final.head.title, 'Deck');
 });
 
 test('every draftable tool names a real tool and a real array field', () => {

@@ -159,12 +159,20 @@
     applyAction({ type: 'open', app: ev.app, size: ev.size || 'm', focus: true });
   }
 
+  /* Each draft event is a full snapshot — the trailing item grows as its text
+     arrives. Repaint on an animation frame so a fast stream stays smooth. */
+  let draftRaf = 0;
   function applyDraft(ev) {
-    if (!state.draft || state.draft.app !== ev.app) state.draft = { app: ev.app, field: ev.field, items: [] };
-    state.draft.field = ev.field;
-    state.draft.items.push(...ev.items);
+    state.draft = { app: ev.app, field: ev.field, head: ev.head || {}, items: ev.items || [] };
     const app = findApp(ev.app);
-    if (app) { app.ui = null; dirty(ev.app); }
+    if (!app) return;
+    app.ui = null;
+    cancelAnimationFrame(draftRaf);
+    draftRaf = requestAnimationFrame(() => {
+      const t = tiles.get(ev.app);
+      if (t) renderTile(app, t, { instant: true });
+      else dirty(ev.app);
+    });
   }
 
   /* ephemeral status: lives in the tile + the composer strip, never in history */
@@ -406,10 +414,20 @@
     refreshLauncher();
   }
 
-  function renderTile(app, t) {
+  function renderTile(app, t, opts = {}) {
     if (!findApp(app.id)) return;
     app.dirtyFlag = false;
     const b = t.body;
+    if (opts.instant) {
+      // mid-stream repaint: no fade, or the text would flicker on every delta
+      const keep = b.scrollTop;
+      const pinned = b.scrollHeight - b.clientHeight - keep < 40;
+      b.style.transition = 'none';
+      b.style.opacity = '1';
+      render(app.id, b, app);
+      b.scrollTop = pinned ? b.scrollHeight : keep;
+      return;
+    }
     b.style.transition = 'none';
     b.style.opacity = '0';
     render(app.id, b, app);

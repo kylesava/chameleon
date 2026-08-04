@@ -265,6 +265,17 @@ body.tiledrag .tile:not(.drag) { pointer-events: none; }
 /* content arriving live: each item lands as it is written */
 .born { animation: born 340ms var(--ease-spring) backwards; }
 @keyframes born { from { opacity: 0; transform: translateY(7px); } }
+.draft-root { height: 100%; overflow-y: auto; padding: 12px 14px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.draft-items { display: flex; flex-direction: column; gap: 4px; }
+.draft-head { margin-bottom: 8px; }
+/* the caret on the text being typed right now */
+.caret {
+  display: inline-block; width: 2px; height: 0.95em;
+  vertical-align: text-bottom; margin-left: 2px;
+  background: var(--accent-2); border-radius: 1px;
+  animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
 .writing {
   display: flex; align-items: center; gap: 5px;
   padding: 9px 4px 4px;
@@ -348,8 +359,8 @@ body.place-right #chatdock {
 }
 body.place-left #chatdock { left: 14px; right: auto; }
 body.place-right #chatdock { right: 14px; left: auto; }
-body.place-left #chat-log,
-body.place-right #chat-log { max-height: none; flex: 1 1 auto; }
+body.place-left #chat-log-wrap,
+body.place-right #chat-log-wrap { flex: 1 1 auto; }
 
 /* minimised: a sliver you can still type into */
 body.place-mini #chatdock {
@@ -357,35 +368,48 @@ body.place-mini #chatdock {
   width: 300px;
   cursor: pointer;
 }
-body.place-mini #chat-log, body.place-mini #hero { display: none; }
+body.place-mini #chat-log-wrap, body.place-mini #hero { display: none; }
 body.place-mini #chat-input { height: 38px; font-size: 12.5px; }
 body.place-mini #chat-send { width: 38px; height: 38px; }
 body.place-mini #chat-where::after { content: ' — click to expand'; }
 
-/* the grip bar */
+/* the drag bar — the whole strip is the handle */
 #chat-bar {
   display: none; align-items: center; gap: 7px;
-  padding: 2px 6px 6px;
+  padding: 4px 8px 7px;
   color: var(--text-faint);
   user-select: none;
+  cursor: grab;
+  border-radius: 12px 12px 0 0;
+  transition: background 160ms ease, color 160ms ease;
 }
 #chatdock.fused #chat-bar { display: flex; }
 body.chat-center #chat-bar { display: none !important; }
-#chat-grip { cursor: grab; display: grid; place-items: center; width: 20px; height: 18px; border-radius: 5px; }
+#chat-bar:hover { background: var(--fill-1); color: var(--text-dim); }
+body.dragging #chat-bar { cursor: grabbing; background: var(--fill-2); }
+#chat-grip { display: grid; place-items: center; width: 16px; height: 16px; }
 #chat-grip svg { width: 13px; height: 13px; }
-#chat-grip:hover { color: var(--text-dim); background: var(--fill-1); }
-body.dragging #chat-grip { cursor: grabbing; }
 #chat-where { font: 500 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; }
+#chat-bar::after {
+  content: 'drag to move';
+  margin-left: 8px; font: 500 9px 'IBM Plex Mono', monospace; letter-spacing: 0.6px;
+  opacity: 0; transition: opacity 160ms ease;
+}
+#chat-bar:hover::after { opacity: 0.55; }
 #chat-collapse {
-  margin-left: auto; width: 22px; height: 20px;
+  margin-left: auto; width: 24px; height: 22px;
   border: 0; background: transparent; color: var(--text-faint);
   border-radius: 6px; cursor: pointer; display: grid; place-items: center;
+  transition: opacity 200ms ease, background 140ms ease, color 140ms ease;
 }
-#chat-collapse svg { width: 13px; height: 13px; transition: transform 260ms var(--ease-spring); }
+#chat-collapse svg { width: 13px; height: 13px; transition: transform 300ms var(--ease-spring); }
 #chat-collapse:hover { background: var(--fill-2); color: var(--text); }
 body.chat-collapsed #chat-collapse svg { transform: rotate(180deg); }
-/* manual hide — the conversation gets out of the way on demand */
-body.chat-collapsed #chat-log { max-height: 0; opacity: 0; padding: 0; overflow: hidden; pointer-events: none; }
+/* while the agent works the history is hidden for us — no toggle to offer, and
+   a chevron flipping mid-generation was pure noise */
+body.acting #chat-collapse, body.place-mini #chat-collapse { opacity: 0; pointer-events: none; }
+body.acting #chat-bar::after { content: none; }
+body.acting #chat-bar { cursor: default; background: transparent; }
 
 /* drop zones while dragging the chat */
 .zone {
@@ -461,21 +485,27 @@ body.acting #chatdock.fused {
   background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0;
 }
 
+/* History collapse uses a 1fr → 0fr grid row: it animates smoothly whether the
+   log is height-capped (centre) or flex-filling (side docks), where animating
+   max-height would snap. */
+#chat-log-wrap {
+  display: grid; grid-template-rows: 1fr; min-height: 0;
+  transition: grid-template-rows 380ms var(--ease-spring), opacity 240ms ease;
+}
+body.acting #chat-log-wrap,
+body.chat-collapsed #chat-log-wrap { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+body.chat-center #chat-log-wrap,
+body:not(.has-msgs) #chat-log-wrap { display: none; }
+
 #chat-log {
+  min-height: 0;
   max-height: 42vh;
   overflow-y: auto;
   display: flex; flex-direction: column; gap: 10px;
   padding: 12px 12px 14px;
   scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
-  transition: opacity 260ms ease, transform 380ms var(--ease-spring), max-height 420ms var(--ease-spring), padding 300ms ease;
 }
-body.chat-center #chat-log,
-body:not(.has-msgs) #chat-log { display: none; }
-/* commandment 5: history yields while the agent works in the apps */
-body.acting #chat-log {
-  opacity: 0; transform: translateY(14px); pointer-events: none;
-  max-height: 0; padding: 0; overflow: hidden;
-}
+body.place-left #chat-log, body.place-right #chat-log { max-height: none; }
 
 .msg { max-width: 88%; display: flex; flex-direction: column; align-self: flex-start; align-items: flex-start; animation: msg-in 380ms var(--ease-spring); }
 .msg.user { align-self: flex-end; align-items: flex-end; }
