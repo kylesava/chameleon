@@ -545,13 +545,25 @@ body.chatzones #zone-center { transform: translateX(-50%); }
 body.dragging { user-select: none; }
 
 /* ---- ephemeral status strip (commandment 7) ---- */
+/* A self-contained pill: the composer is not always sitting on a card (it
+   isn't when minimised, or before the first message), and bare text floating
+   over the tiles was unreadable and looked like a glitch. */
 #chat-status {
   display: none; align-items: center; gap: 8px;
-  padding: 4px 12px 8px;
+  align-self: flex-start; max-width: 100%;
+  margin: 0 0 8px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  background: rgba(13, 16, 22, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   font: 500 11px 'IBM Plex Sans', sans-serif; color: var(--accent-2);
 }
-body.has-status #chat-status { display: flex; animation: msg-in 260ms var(--ease-spring); }
-body.chat-center #chat-status { justify-content: center; }
+body.has-status #chat-status { display: flex; animation: rise var(--t-in) var(--ease-out); }
+body.chat-center #chat-status { align-self: center; }
+/* inside the fused card it needs no shell of its own */
+#chatdock.fused #chat-status { background: var(--fill-1); border-color: var(--line); box-shadow: none; backdrop-filter: none; margin-left: 2px; }
 #chat-status i {
   width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: 0 0 auto;
   animation: pulse 1.2s ease-in-out infinite;
