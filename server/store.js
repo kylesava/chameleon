@@ -10,6 +10,22 @@ function makeStore(db) {
   };
   S.getSession = (id) => db.prepare('SELECT * FROM session WHERE id = ?').get(id);
   S.listSessions = () => db.prepare('SELECT id, title, created_at, updated_at FROM session ORDER BY updated_at DESC').all();
+  /* Every page load starts a fresh journey (accounts will change this), so
+     abandoned blank ones would pile up in the switcher. Drop the ones that
+     never became anything. */
+  S.pruneEmptySessions = (exceptId = null) => {
+    const rows = db.prepare(`
+      SELECT s.id FROM session s
+      WHERE s.id != COALESCE(?, -1)
+        AND NOT EXISTS (SELECT 1 FROM message  WHERE session_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM artifact WHERE session_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM source   WHERE session_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM plan     WHERE session_id = s.id)
+    `).all(exceptId);
+    const del = db.prepare('DELETE FROM session WHERE id = ?');
+    for (const r of rows) del.run(r.id);
+    return rows.length;
+  };
   S.touchSession = (id) => db.prepare("UPDATE session SET updated_at = datetime('now') WHERE id = ?").run(id);
   S.renameSession = (id, title) => db.prepare('UPDATE session SET title = ? WHERE id = ?').run(title, id);
   S.saveLayout = (id, layout) => db.prepare('UPDATE session SET layout_json = ? WHERE id = ?').run(JSON.stringify(layout || []), id);

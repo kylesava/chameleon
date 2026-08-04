@@ -54,10 +54,15 @@ function makeApi(store) {
   async function handle(req, res, pathname, query) {
     /* ---------- bootstrap ---------- */
     if (req.method === 'GET' && pathname === '/api/state') {
-      let sessions = store.listSessions();
+      /* A plain load always starts fresh — no resuming half an old lesson.
+         (Real persistence arrives with accounts; ?session=N still returns to
+         a specific journey, and past ones stay in the switcher.) */
       let session = query.get('session') ? store.getSession(Number(query.get('session'))) : null;
-      if (!session) session = sessions.length ? store.getSession(sessions[0].id) : store.createSession('First journey');
-      sessions = store.listSessions();
+      if (!session) {
+        store.pruneEmptySessions();
+        session = store.createSession('New journey');
+      }
+      const sessions = store.listSessions();
       return json(res, 200, {
         session: { ...session, layout: JSON.parse(session.layout_json) },
         sessions,
@@ -106,6 +111,12 @@ function makeApi(store) {
       // A long thinking phase can emit nothing for a while; proxies (Cloudflare)
       // drop idle connections. SSE comments keep it alive and are ignored by the client.
       const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 15000);
+
+      // name the journey after what it turned out to be about
+      if (/^(New|First) journey$/.test(session.title) && !store.listMessages(sessionId, 1).length) {
+        const words = String(b.content).replace(/\s+/g, ' ').trim().split(' ').slice(0, 7).join(' ');
+        if (words) store.renameSession(sessionId, words.length > 52 ? words.slice(0, 52) + '…' : words);
+      }
 
       const layout = {
         get: () => JSON.parse(store.getSession(sessionId).layout_json),
