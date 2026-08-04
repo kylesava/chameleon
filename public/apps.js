@@ -20,6 +20,7 @@
     quiz: '<circle cx="8" cy="8" r="6"/><path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.6.3-.8.6-.8 1.2"/><circle cx="8" cy="11.3" r="0.5" fill="currentColor"/>',
     flashcards: '<rect x="4.5" y="2.5" width="9" height="7" rx="1.5"/><rect x="2.5" y="6" width="9" height="7" rx="1.5"/>',
     podcast: '<rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/>',
+    deck: '<rect x="2" y="3" width="12" height="8" rx="1.5"/><path d="M6 13.5h4M8 11v2.5"/>',
     pointer: '<path d="M4.5 2.5l8 6.5-4 .9 2 4.6-2 .9-2-4.6-2.8 3z"/>',
   };
   const icon = id => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${I[id] || I.lesson}</svg>`;
@@ -32,6 +33,7 @@
     quiz:       { name: 'Quiz',       hue: 268, sizes: { s: [2, 2], m: [3, 3], l: [4, 5], xl: [6, 6] }, max: [6, 6], desc: 'Interactive check of what stuck' },
     flashcards: { name: 'Flashcards', hue: 38,  sizes: { s: [2, 2], m: [3, 2], l: [4, 3], xl: [5, 4] }, max: [5, 4], desc: 'Spaced practice deck' },
     podcast:    { name: 'Podcast',    hue: 330, sizes: { s: [2, 1], m: [3, 2], l: [4, 3], xl: [4, 4] }, max: [4, 4], desc: 'Two-host audio overview with real voices' },
+    deck:       { name: 'Deck',       hue: 292, sizes: { s: [3, 2], m: [4, 3], l: [5, 4], xl: [8, 6] }, max: [8, 6], desc: 'Slides you can present, with speaker notes' },
   };
 
   /* ---- session-state wiring (configured by main.js at boot) ---- */
@@ -451,6 +453,104 @@
       else if (a === 'got') { st.got[st.idx] = true; next(); }
       else if (a === 'again') next();
     });
+  };
+
+  /* ================= deck =================
+     A custom viewer rather than reveal.js: the deck lives in a tile that is
+     constantly resized by the grid, and our diagrams are mounted by Rich —
+     reveal re-measures hidden slides, which is the documented cause of
+     mermaid rendering wrong from slide ~4 on. We need next/prev, notes and
+     fullscreen, and that is cheaper to own than to fight. */
+  function slideHTML(s) {
+    const t = s.title ? `<h2>${esc(s.title)}</h2>` : '';
+    switch (s.layout) {
+      case 'title':
+        return `<div class="sl sl-title"><h1>${esc(s.title || '')}</h1>${s.subtitle ? `<p>${esc(s.subtitle)}</p>` : ''}</div>`;
+      case 'quote':
+        return `<div class="sl sl-quote"><blockquote>${esc(s.quote || '')}</blockquote>${s.attribution ? `<cite>${esc(s.attribution)}</cite>` : ''}</div>`;
+      case 'bullets':
+        return `<div class="sl sl-bullets">${t}<ul>${(s.bullets || []).map(b => `<li>${Rich.inline(b)}</li>`).join('')}</ul></div>`;
+      case 'split':
+        return `<div class="sl sl-split">${t}<div class="sl-cols"><div class="sl-col">${md(s.left || '')}</div><div class="sl-col">${md(s.right || '')}</div></div></div>`;
+      default:
+        return `<div class="sl sl-focus">${t}<div class="sl-body">${md(s.body || '')}</div></div>`;
+    }
+  }
+
+  R.deck = (el, app) => {
+    if (isDrafting('deck')) {
+      const slides = draftItems('deck') || [];
+      const title = draftHead('deck').title;
+      draftList(el, {
+        items: slides,
+        head: title ? `<div class="deck-drafthead">${esc(title)}</div>` : '',
+        render: (s, i) => `<div class="deck-thumb-row"><em>${i + 1}</em><b>${esc(s.title || s.quote || s.layout || '')}</b><i>${esc(s.layout || '')}</i></div>`,
+        footer: writingRow(slides.length ? 'writing slides' : 'planning the deck'),
+      });
+      return;
+    }
+    const art = CTX.currentArtifact('deck');
+    if (!art) return empty(el, 'deck', 'No deck yet.');
+    const d = art.data;
+    const slides = d.slides || [];
+    if (!slides.length) return empty(el, 'deck', 'This deck has no slides.');
+    if (!app.ui || app.ui.artId !== art.id) app.ui = { artId: art.id, i: 0, notes: false };
+    const st = app.ui;
+    st.i = Math.max(0, Math.min(st.i, slides.length - 1));
+    const s = slides[st.i];
+
+    el.innerHTML = `
+      <div class="deck">
+        <div class="deck-stage">
+          <div class="deck-slide">${slideHTML(s)}</div>
+        </div>
+        ${st.notes && s.notes ? `<div class="deck-notes"><b>Say this</b>${esc(s.notes)}</div>` : ''}
+        <div class="deck-bar">
+          <button class="dbtn" data-a="prev" ${st.i === 0 ? 'disabled' : ''}>‹</button>
+          <div class="deck-dots">${slides.map((x, j) => `<i class="${j === st.i ? 'on' : ''}" data-j="${j}" title="${esc(x.title || x.layout)}"></i>`).join('')}</div>
+          <button class="dbtn" data-a="next" ${st.i === slides.length - 1 ? 'disabled' : ''}>›</button>
+          <span class="deck-count">${st.i + 1}/${slides.length}</span>
+          <button class="dbtn wide ${st.notes ? 'on' : ''}" data-a="notes" title="Speaker notes">notes</button>
+          <button class="dbtn wide" data-a="full" title="Present fullscreen">present</button>
+        </div>
+      </div>`;
+
+    Rich.enhance(el.querySelector('.deck-slide'));
+
+    const go = n => {
+      const next = Math.max(0, Math.min(n, slides.length - 1));
+      if (next === st.i) return;
+      st.i = next;
+      R.deck(el, app);
+      if (st.i === slides.length - 1) {
+        emit({
+          desc: `reached the last slide of the deck "${d.title}" (artifact #${art.id}). Ask what they want to do with it, or move the plan on.`,
+          label: 'Deck finished', icon: 'deck',
+        });
+      }
+    };
+    el.querySelectorAll('[data-a]').forEach(b => b.onclick = ev => {
+      ev.stopPropagation();
+      const a = b.dataset.a;
+      if (a === 'prev') go(st.i - 1);
+      else if (a === 'next') go(st.i + 1);
+      else if (a === 'notes') { st.notes = !st.notes; R.deck(el, app); }
+      else if (a === 'full') {
+        const stage = el.querySelector('.deck');
+        if (stage.requestFullscreen) stage.requestFullscreen().catch(() => {});
+      }
+    });
+    el.querySelectorAll('.deck-dots i').forEach(dot => dot.onclick = ev => { ev.stopPropagation(); go(Number(dot.dataset.j)); });
+
+    // arrow keys drive the deck while it has focus (and in fullscreen)
+    const stage = el.querySelector('.deck');
+    stage.tabIndex = 0;
+    stage.onkeydown = ev => {
+      if (ev.key === 'ArrowRight' || ev.key === ' ' || ev.key === 'PageDown') { ev.preventDefault(); go(st.i + 1); }
+      else if (ev.key === 'ArrowLeft' || ev.key === 'PageUp') { ev.preventDefault(); go(st.i - 1); }
+      else if (ev.key === 'Home') go(0);
+      else if (ev.key === 'End') go(slides.length - 1);
+    };
   };
 
   /* ================= podcast ================= */

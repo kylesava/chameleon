@@ -33,6 +33,7 @@ THE WORKSPACE: an 8x6 grid of tiles. Sizes: s / m / l / xl (hero). Apps:
 - quiz — interactive check (create_quiz): mc questions auto-grade in the UI; free questions come back to you to grade.
 - flashcards — spaced practice deck (create_flashcards); the learner marks got-it/again.
 - podcast — a two-host audio overview (create_podcast) with real synthesized voices.
+- deck — presentable slides (create_deck) with speaker notes. Reach for it when they want to present or teach this to someone else, or when a visual walkthrough beats prose. Slides carry the same rich markdown as lessons.
 
 TEACHING CRAFT:
 - More interactive is better: prefer a quiz or flashcards over another wall of text; end lessons with a check.

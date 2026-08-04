@@ -65,6 +65,17 @@ against them; when a feature conflicts with a commandment, the commandment wins.
 
 - **Node 24+**, zero npm dependencies. Keep it that way — no framework, no build step.
 - **One process, one SQLite file** (`data/chameleon.db`). Never run two instances against it.
+- **Visual libraries are CDN-loaded, pinned, and lazy.** `public/richtext.js` owns
+  the markdown engine and mounts Mermaid 11.16.0, KaTeX 0.18.1, Vega-Lite 6.4.3
+  and highlight.js 11.11.1 on first use only. Pin exact versions — floating tags
+  have shipped breaking changes on all four. Every mount degrades to readable
+  source if the CDN is unreachable, and `<!doctype html>` must stay first in
+  index.html or KaTeX silently renders nothing.
+- **Decks use a custom viewer, not reveal.js.** The deck is a tile the grid
+  resizes constantly, and reveal re-measures hidden slides — the documented
+  cause of Mermaid breaking from slide ~4 on. A `.pptx` export via Anthropic's
+  `pptx` Agent Skill is the intended next step; that skill is proprietary
+  (pptxgenjs under the hood), so call it, never vendor it or copy its rules.
 - **Static assets are served with a `?v=` stamp** (`assetVersion` in `server/index.js`). Without it the CDN caches `.js`/`.css` for hours and a deploy ships new HTML against stale scripts. Don't remove the stamping or the `no-cache` header on HTML.
 - Secrets live in `.env` (gitignored): `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`.
 - The notebook (`source` rows) is ground truth for teaching — never contradict it.

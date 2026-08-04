@@ -3,7 +3,7 @@
    one-at-a-time action queue, and returns a short factual string the model
    reads as the tool_result. */
 
-const APP_IDS = ['plan', 'sources', 'lesson', 'quiz', 'flashcards', 'podcast'];
+const APP_IDS = ['plan', 'sources', 'lesson', 'quiz', 'flashcards', 'podcast', 'deck'];
 const SIZES = ['s', 'm', 'l', 'xl'];
 
 const TOOLS = [
@@ -193,6 +193,49 @@ Aim for a diagram or table in most sections, and at least one callout per lesson
     },
   },
   {
+    name: 'create_deck',
+    description: `Build a slide deck the learner can present or step through — for explaining something to someone else, revising a topic visually, or when they ask for slides. Opens the deck app automatically. Pass artifact_id to revise an existing deck.
+
+Choose a layout per slide and fill only that layout's fields:
+- "title" — the opener. title + subtitle.
+- "bullets" — title + bullets (3-5, each under ~10 words; they are talking points, not paragraphs).
+- "focus" — title + body, where body is one big idea: a mermaid diagram, a chart, a table, or a short statement. This is your workhorse for anything visual.
+- "split" — title + left + right markdown. For before/after, problem/solution, theory/practice.
+- "quote" — quote + optional attribution. A single arresting line, full bleed.
+
+Slide bodies, left/right and bullets all take the same rich markdown the lesson uses: mermaid fences, chart fences, tables, $maths$, code, callouts. A deck of nothing but bullet lists is a bad deck — carry the argument with diagrams and comparisons, and let each slide make exactly one point.
+
+Always write "notes" for each slide: what the presenter should actually say. That is where the detail lives; the slide itself stays sparse.`,
+    input_schema: {
+      type: 'object',
+      required: ['title', 'slides'],
+      properties: {
+        title: { type: 'string' },
+        subtitle: { type: 'string' },
+        slides: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['layout'],
+            properties: {
+              layout: { type: 'string', enum: ['title', 'bullets', 'focus', 'split', 'quote'] },
+              title: { type: 'string' },
+              subtitle: { type: 'string' },
+              bullets: { type: 'array', items: { type: 'string' } },
+              body: { type: 'string', description: 'Rich markdown — a mermaid fence, chart fence, table, or short statement.' },
+              left: { type: 'string' },
+              right: { type: 'string' },
+              quote: { type: 'string' },
+              attribution: { type: 'string' },
+              notes: { type: 'string', description: 'What to say out loud on this slide.' },
+            },
+          },
+        },
+        artifact_id: { type: 'integer' },
+      },
+    },
+  },
+  {
     name: 'add_note',
     description: "Append a note to the learner's notebook (the sources app) — key takeaways, definitions, things to revisit. Notes become part of the grounding context.",
     input_schema: {
@@ -214,6 +257,7 @@ const DRAFTABLE = {
   create_lesson:     { app: 'lesson',     field: 'sections',  size: 'l', status: 'Writing the lesson…' },
   create_flashcards: { app: 'flashcards', field: 'cards',     size: 'm', status: 'Building the deck…' },
   create_podcast:    { app: 'podcast',    field: 'lines',     size: 'm', status: 'Recording the episode…' },
+  create_deck:       { app: 'deck',       field: 'slides',    size: 'l', status: 'Building your deck…' },
   update_plan:       { app: 'plan',       field: 'tasks',     size: 'm', status: 'Mapping out your goals…' },
 };
 /* Tools with no streamable body still announce themselves. */
@@ -415,6 +459,16 @@ function makeExecutors(ctx) {
       emit({ t: 'artifact', app: 'quiz', artifact: art });
       openForArtifact('quiz', 'l');
       return `Quiz artifact #${art.id} saved (${qs.length} questions) and opened.`;
+    },
+
+    create_deck(input) {
+      const slides = (input.slides || []).filter(s => s && s.layout);
+      if (!slides.length) throw new Error('a deck needs at least one slide');
+      const art = store.saveArtifact(sessionId, 'deck', input.title,
+        { title: input.title, subtitle: input.subtitle || '', slides }, input.artifact_id || null);
+      emit({ t: 'artifact', app: 'deck', artifact: art });
+      openForArtifact('deck', 'l');
+      return `Deck #${art.id} saved (${slides.length} slides) and opened.`;
     },
 
     create_podcast(input) {
