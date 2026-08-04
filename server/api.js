@@ -175,13 +175,32 @@ function makeApi(store) {
       return json(res, 200, { ok: true });
     }
 
-    /* ---------- plan checkbox ---------- */
+    /* ---------- the plan: tick, rename, remove, add ----------
+       These apply immediately and do NOT start an agent turn — steering your
+       own goals should never mean waiting. The agent sees the updated plan in
+       the next turn's state digest. */
     if (req.method === 'POST' && pathname === '/api/task') {
       const b = await readJson(req);
-      const task = store.setTaskStatus(Number(b.task_id), String(b.status));
+      const sessionId = Number(b.session_id);
+      let task = null;
+      if (b.status) task = store.setTaskStatus(Number(b.task_id), String(b.status));
+      else if (b.title !== undefined || b.detail !== undefined) task = store.updateTask(Number(b.task_id), b);
+      else return json(res, 400, { error: 'nothing to change' });
       if (!task) return json(res, 404, { error: 'no such task' });
-      const plan = store.getPlan(Number(b.session_id));
-      return json(res, 200, { task, plan });
+      return json(res, 200, { task, plan: store.getPlan(sessionId) });
+    }
+    if (req.method === 'DELETE' && pathname.startsWith('/api/task/')) {
+      const id = Number(pathname.split('/').pop());
+      const ok = store.deleteTask(id);
+      const sid = Number(query.get('session'));
+      return json(res, ok ? 200 : 404, ok ? { ok: true, plan: sid ? store.getPlan(sid) : null } : { error: 'no such task' });
+    }
+    if (req.method === 'POST' && pathname === '/api/task/new') {
+      const b = await readJson(req);
+      if (!b.title || !String(b.title).trim()) return json(res, 400, { error: 'title required' });
+      const task = store.addTask(Number(b.session_id), b.title, { stage: b.stage, detail: b.detail });
+      if (!task) return json(res, 409, { error: 'no plan yet' });
+      return json(res, 200, { task, plan: store.getPlan(Number(b.session_id)) });
     }
 
     /* ---------- quiz attempts (mc auto-grade; free answers go to the agent) ---------- */

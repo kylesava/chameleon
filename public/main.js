@@ -24,6 +24,7 @@
     tts: false,
     draft: null,       // { app, field, items } — content streaming in right now
     status: {},        // app id -> ephemeral "what I'm doing" line (never chat history)
+    narration: {},     // app id -> what the agent last said inside that window
   };
   const tiles = new Map();
 
@@ -47,6 +48,8 @@
   state.artifacts = boot.artifacts;
   state.tts = boot.tts;
   for (const a of boot.artifacts) state.currentArt[a.app] = a.id; // listed oldest→newest; last wins
+  // the last thing the agent said in each window survives a reload with it
+  for (const m of boot.messages) if (m.kind === 'narration' && m.app) state.narration[m.app] = m.content;
 
   Apps.configure({
     getPlan: () => state.plan,
@@ -62,6 +65,7 @@
     api,
     sourceAdded: src => { state.sources.push(src); dirty('sources'); },
     sourceRemoved: id => { state.sources = state.sources.filter(s => s.id !== id); dirty('sources'); },
+    planChanged: plan => { state.plan = plan; dirty('plan'); },
   });
 
   Chat.configure({
@@ -292,24 +296,44 @@
     }
   }
 
-  /* narration bubble inside the app window (commandment 3) */
+  /* Narration inside the app window (commandment 3) — the primary voice.
+     It types in, then STAYS until the agent says something else there or the
+     learner dismisses it, so the app window carries the teaching rather than
+     the transcript. */
   function narrateInTile(appId, text) {
+    state.narration[appId] = text;
+    paintNarration(appId);
+  }
+
+  function paintNarration(appId) {
     const t = tiles.get(appId);
     if (!t) return;
-    t.el.querySelector('.tile-narr')?.remove();
+    const text = state.narration[appId];
+    const existing = t.el.querySelector('.tile-narr');
+    if (!text) { existing?.remove(); return; }
+    if (existing && existing.dataset.text === text) return;
+    existing?.remove();
+
     const n = document.createElement('div');
     n.className = 'tile-narr';
-    n.innerHTML = `<img src="chameleon.png" alt=""><span></span>`;
+    n.dataset.text = text;
+    n.innerHTML = `<img src="chameleon.png" alt=""><span></span><button class="narr-x" title="Dismiss">×</button>`;
     t.el.appendChild(n);
+    n.querySelector('.narr-x').onclick = e => {
+      e.stopPropagation();
+      delete state.narration[appId];
+      n.classList.add('out');
+      setTimeout(() => n.remove(), 300);
+    };
     const span = n.querySelector('span');
     let i = 0;
-    const step = Math.max(1, Math.round(text.length / 40));
-    const id = setInterval(() => {
+    const step = Math.max(1, Math.round(text.length / 45));
+    clearInterval(t.narrTimer);
+    t.narrTimer = setInterval(() => {
       i += step;
       span.textContent = text.slice(0, i);
-      if (i >= text.length) clearInterval(id);
-    }, 24);
-    setTimeout(() => { n.classList.add('out'); setTimeout(() => n.remove(), 400); }, 2600 + text.length * 28);
+      if (i >= text.length) { span.textContent = text; clearInterval(t.narrTimer); }
+    }, 22);
   }
 
   /* ---------------- layout + tile DOM (carried from the POC) ---------------- */
@@ -392,6 +416,7 @@
         t.cellPos = { x: p.x, y: p.y, w: p.w, h: p.h };
         renderTile(app, t);
         paintStatus(p.id);
+        paintNarration(p.id);
       } else {
         if (p.id !== state.dragId) {
           Object.assign(t.el.style, { left: geo.left + 'px', top: geo.top + 'px', width: geo.width + 'px', height: geo.height + 'px' });

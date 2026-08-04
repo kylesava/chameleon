@@ -300,19 +300,33 @@ body.tiledrag .tile:not(.drag) { pointer-events: none; }
 .fc-draft span { display: block; font-size: 10.5px; color: var(--text-faint); margin-top: 2px; }
 
 /* narration overlay — the agent talking inside the app window */
+/* The agent speaking inside the app it is working in. This is the primary
+   voice — it stays put until superseded or dismissed, so the window teaches
+   and the transcript stays out of the way. */
 .tile-narr {
   position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6;
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 9px 12px; border-radius: 11px;
-  background: rgba(14, 17, 24, 0.92);
-  border: 1px solid hsl(var(--h) 60% 60% / 0.35);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), 0 0 18px hsl(var(--h) 80% 60% / 0.1);
-  font-size: 12px; line-height: 1.5; color: var(--text);
-  animation: narr-in 320ms var(--ease-spring);
-  pointer-events: none;
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 10px 12px 10px 11px; border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 26, 36, 0.97), rgba(14, 17, 24, 0.97));
+  backdrop-filter: blur(10px);
+  border: 1px solid hsl(var(--h) 60% 60% / 0.4);
+  border-left: 2.5px solid hsl(var(--h) 75% 62% / 0.85);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 22px hsl(var(--h) 80% 60% / 0.12);
+  font-size: 12.5px; line-height: 1.55; color: var(--text);
+  animation: narr-in 340ms var(--ease-spring);
 }
-.tile-narr img { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 1px; }
-.tile-narr.out { opacity: 0; transform: translateY(6px); transition: all 380ms ease; }
+.tile-narr img { width: 20px; height: 20px; flex: 0 0 auto; margin-top: 1px; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5)); }
+.tile-narr span { flex: 1; min-width: 0; }
+.narr-x {
+  flex: 0 0 auto; width: 18px; height: 18px; margin: -1px -3px 0 0;
+  border: 0; background: transparent; color: var(--text-faint);
+  border-radius: 5px; cursor: pointer; font-size: 13px; line-height: 1;
+  display: grid; place-items: center; opacity: 0;
+  transition: opacity 150ms ease, background 140ms ease, color 140ms ease;
+}
+.tile-narr:hover .narr-x { opacity: 1; }
+.narr-x:hover { background: var(--fill-2); color: var(--text); }
+.tile-narr.out { opacity: 0; transform: translateY(6px); transition: all 300ms ease; }
 @keyframes narr-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
 
 /* resize guides + waves + shake */
@@ -350,6 +364,17 @@ body.tiledrag .tile:not(.drag) { pointer-events: none; }
     left 500ms var(--ease-spring), right 500ms var(--ease-spring), width 500ms var(--ease-spring);
 }
 body.chat-center #chatdock { top: 14%; bottom: auto; }
+
+/* lifted: the panel tracks the cursor, so a drag feels like carrying it */
+body.chat-lifted #chatdock {
+  transform: translate(var(--drag-x, 0), var(--drag-y, 0)) scale(0.97);
+  transition: none;
+  z-index: 40;
+  opacity: 0.96;
+  pointer-events: none;
+  filter: drop-shadow(0 22px 46px rgba(0, 0, 0, 0.6));
+}
+body.chat-lifted #chat-bar { background: var(--fill-2); }
 
 /* ---- placements ---- */
 body.place-left #chatdock,
@@ -637,12 +662,36 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 .plan-task {
   position: relative;
   display: flex; align-items: flex-start; gap: 9px;
-  padding: 6px 8px; border-radius: 9px; cursor: pointer;
-  transition: background 140ms ease;
+  padding: 6px 8px; border-radius: 9px;
+  transition: background 140ms ease, opacity 220ms ease, transform 220ms ease;
 }
 .plan-task:hover { background: var(--fill-1); }
+.plan-task.removing { opacity: 0; transform: translateX(-10px); }
+.pt-tick { cursor: pointer; display: block; }
 /* the checkbox is an override, not the mechanism: hidden until you reach for it */
 .plan-task input { position: absolute; opacity: 0; width: 16px; height: 16px; left: 7px; top: 7px; margin: 0; cursor: pointer; }
+.pt-text { flex: 1; min-width: 0; }
+.pt-text b { cursor: text; border-radius: 4px; padding: 0 2px; margin: 0 -2px; outline: none; transition: background 140ms ease, box-shadow 140ms ease; }
+.pt-text b:hover { background: rgba(255, 255, 255, 0.05); }
+.pt-text b:focus { background: rgba(0, 0, 0, 0.35); box-shadow: 0 0 0 1px var(--accent); }
+.pt-del {
+  flex: 0 0 auto; width: 19px; height: 19px; margin-top: 1px;
+  border: 0; background: transparent; color: var(--text-faint);
+  border-radius: 5px; cursor: pointer; font-size: 14px; line-height: 1;
+  display: grid; place-items: center; opacity: 0;
+  transition: opacity 150ms ease, background 140ms ease, color 140ms ease;
+}
+.plan-task:hover .pt-del { opacity: 1; }
+.pt-del:hover { background: rgba(220, 47, 106, 0.12); color: var(--bad); }
+.plan-add {
+  margin-top: 6px; align-self: flex-start;
+  border: 1px dashed var(--line-2); border-radius: 8px;
+  background: transparent; color: var(--text-faint);
+  font: 500 10.5px 'IBM Plex Sans', sans-serif;
+  padding: 5px 10px; cursor: pointer;
+  transition: all 150ms ease;
+}
+.plan-add:hover { color: var(--accent-2); border-color: var(--accent); background: rgba(93, 135, 255, 0.06); }
 .pt-mark {
   flex: 0 0 auto; width: 13px; height: 13px; margin-top: 2px;
   border-radius: 50%; border: 1.5px solid var(--line-2);

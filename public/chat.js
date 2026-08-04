@@ -86,8 +86,12 @@
       if (!moved) {
         if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 5) return;
         moved = true;
-        document.body.classList.add('chatzones', 'dragging');
+        document.body.classList.add('chatzones', 'dragging', 'chat-lifted');
       }
+      // the panel comes with you — a drop-zone highlight alone reads as broken
+      dock.style.setProperty('--drag-x', (ev.clientX - e.clientX) + 'px');
+      dock.style.setProperty('--drag-y', (ev.clientY - e.clientY) + 'px');
+
       const x = ev.clientX - sr.left, y = ev.clientY - sr.top;
       target = (y > sr.height - 120 && x > sr.width - 320) ? 'mini'
         : x < 210 ? 'left'
@@ -98,7 +102,9 @@
     const up = () => {
       window.removeEventListener('mousemove', mv);
       window.removeEventListener('mouseup', up);
-      document.body.classList.remove('chatzones', 'dragging');
+      document.body.classList.remove('chatzones', 'dragging', 'chat-lifted');
+      dock.style.removeProperty('--drag-x');
+      dock.style.removeProperty('--drag-y');
       for (const k in zones) zones[k].classList.remove('arm');
       if (!moved) return;
       if (target === 'mini' && place !== 'mini') localStorage.setItem('cham_place_prev', place);

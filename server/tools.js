@@ -77,7 +77,7 @@ const TOOLS = [
   },
   {
     name: 'narrate',
-    description: "Say a short line INSIDE an app window while you work on it — the workspace equivalent of talking while you write on the whiteboard. One or two sentences, shown in that tile and mirrored to the chat history. Use it to tell the learner what you are setting up or what to look at. The app must be open (or being opened this turn).",
+    description: "YOUR MAIN VOICE. Say a line INSIDE an app window — it appears in that tile, beside the thing it is about, and stays there until you say something else in that window. This is the workspace equivalent of talking while you write on the whiteboard, and it is where nearly all of your teaching commentary belongs. One or two sentences, pointed at what is on screen: what to read first, what to notice, what to try, what people usually get wrong here. Use it several times a turn — when you open something, when the content lands, when you hand them a task. The app must be open (or be opened this turn). Prefer this over saying it in chat; the chat reply should be almost nothing.",
     input_schema: {
       type: 'object',
       required: ['app', 'text'],

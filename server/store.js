@@ -62,6 +62,30 @@ function makeStore(db) {
     return db.prepare('SELECT * FROM plan_task WHERE id = ?').get(taskId);
   };
   S.getTask = (taskId) => db.prepare('SELECT * FROM plan_task WHERE id = ?').get(taskId);
+  S.updateTask = (taskId, fields) => {
+    const t = S.getTask(taskId);
+    if (!t) return null;
+    const title = fields.title !== undefined ? String(fields.title).trim().slice(0, 300) : t.title;
+    const detail = fields.detail !== undefined ? String(fields.detail).trim().slice(0, 500) : t.detail;
+    if (!title) return t; // never let a goal lose its name
+    db.prepare('UPDATE plan_task SET title = ?, detail = ? WHERE id = ?').run(title, detail, taskId);
+    return S.getTask(taskId);
+  };
+  S.deleteTask = (taskId) => {
+    const t = S.getTask(taskId);
+    if (!t) return false;
+    db.prepare('DELETE FROM plan_task WHERE id = ?').run(taskId);
+    return true;
+  };
+  S.addTask = (sessionId, title, opts = {}) => {
+    const plan = db.prepare('SELECT * FROM plan WHERE session_id = ? ORDER BY id DESC LIMIT 1').get(sessionId);
+    if (!plan) return null;
+    const last = db.prepare('SELECT MAX(ord) AS o, MAX(stage) AS s FROM plan_task WHERE plan_id = ?').get(plan.id);
+    const r = db.prepare('INSERT INTO plan_task (plan_id, ord, stage, title, detail, status) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(plan.id, (last.o ?? -1) + 1, Number.isInteger(opts.stage) ? opts.stage : (last.s ?? 0),
+        String(title).trim().slice(0, 300), String(opts.detail || '').slice(0, 500), 'todo');
+    return S.getTask(Number(r.lastInsertRowid));
+  };
 
   /* ---- sources ---- */
   S.addSource = (sessionId, kind, title, content) => {

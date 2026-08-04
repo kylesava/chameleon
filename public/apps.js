@@ -45,6 +45,9 @@
     sessionId: () => null,
     draftFor: () => null,
     statusFor: () => null,
+    planChanged: () => {},
+    sourceAdded: () => {},
+    sourceRemoved: () => {},
     api: async () => { throw new Error('not configured'); },
   };
   function configure(o) { CTX = { ...CTX, ...o }; }
@@ -161,14 +164,61 @@
           ${[...stages.entries()].sort((a, b) => a[0] - b[0]).map(([stage, tasks]) => `
             ${stages.size > 1 && !compact ? `<div class="plan-stage">stage ${stage + 1}</div>` : ''}
             ${tasks.map(t => `
-              <label class="plan-task ${t.status}" data-t="${t.id}" title="${t.status === 'done' ? 'Reopen this goal' : 'Already know this? Tick to skip it'}">
-                <input type="checkbox" ${t.status === 'done' ? 'checked' : ''}>
-                <i class="pt-mark"></i>
-                <div><b>${esc(t.title)}</b>${t.detail && !compact && t.status !== 'done' ? `<span>${esc(t.detail)}</span>` : ''}</div>
-              </label>`).join('')}
+              <div class="plan-task ${t.status}" data-t="${t.id}">
+                <label class="pt-tick" title="${t.status === 'done' ? 'Reopen this goal' : 'Already know this? Tick to skip it'}">
+                  <input type="checkbox" ${t.status === 'done' ? 'checked' : ''}>
+                  <i class="pt-mark"></i>
+                </label>
+                <div class="pt-text"><b contenteditable="plaintext-only" spellcheck="false" title="Click to rewrite this goal">${esc(t.title)}</b>${t.detail && !compact && t.status !== 'done' ? `<span>${esc(t.detail)}</span>` : ''}</div>
+                <button class="pt-del" title="Remove this goal">×</button>
+              </div>`).join('')}
           `).join('')}
+          <button class="plan-add">+ add a goal</button>
         </div>
       </div>`;
+
+    /* Rename in place. Applies on blur or Enter; Escape reverts. No agent turn
+       — the plan is yours to steer and steering shouldn't cost a round trip. */
+    el.querySelectorAll('.pt-text b').forEach(b => {
+      const id = Number(b.closest('.plan-task').dataset.t);
+      const original = b.textContent;
+      b.onkeydown = ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); b.blur(); }
+        else if (ev.key === 'Escape') { b.textContent = original; b.blur(); }
+        ev.stopPropagation();
+      };
+      b.onblur = async () => {
+        const title = b.textContent.trim();
+        if (!title) { b.textContent = original; return; }
+        if (title === original) return;
+        const task = plan.tasks.find(t => t.id === id);
+        if (task) task.title = title;
+        try { await CTX.api('/api/task', { task_id: id, title, session_id: CTX.sessionId() }); }
+        catch { b.textContent = original; }
+      };
+    });
+
+    el.querySelectorAll('.pt-del').forEach(btn => btn.onclick = async ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const row = btn.closest('.plan-task');
+      const id = Number(row.dataset.t);
+      row.classList.add('removing');
+      try {
+        const r = await CTX.api(`/api/task/${id}?session=${CTX.sessionId()}`, null, 'DELETE');
+        if (r.plan) CTX.planChanged(r.plan);
+      } catch { row.classList.remove('removing'); }
+    });
+
+    const addBtn = el.querySelector('.plan-add');
+    if (addBtn) addBtn.onclick = async () => {
+      const title = prompt('What else do you want to cover?');
+      if (!title || !title.trim()) return;
+      try {
+        const r = await CTX.api('/api/task/new', { session_id: CTX.sessionId(), title: title.trim() });
+        if (r.plan) CTX.planChanged(r.plan);
+      } catch (e) { alert(e.message); }
+    };
 
     el.querySelectorAll('.plan-task input').forEach(cb => cb.onchange = async () => {
       const id = Number(cb.closest('.plan-task').dataset.t);
