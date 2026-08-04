@@ -7,14 +7,15 @@ const images = require('./images.js');
 
 const APP_IDS = ['plan', 'sources', 'lesson', 'quiz', 'flashcards', 'podcast', 'deck'];
 
-/* Only advertise illustrations when there's a key to draw them with —
-   otherwise every lesson would come back peppered with dead placeholders. */
-const IMG_GUIDE = images.enabled()
+/* Only advertise illustrations while they can actually be drawn — no key, or
+   a provider that has stopped serving, means every lesson would come back
+   peppered with placeholders that can never resolve. Evaluated per turn. */
+const IMG_GUIDE = () => images.enabled()
   ? "\n- **Generated illustration** with `![short caption](gen:what to draw)` — an image model draws it in the workspace's own dark editorial style. Use it for what a diagram cannot carry: the feel of a concept, a physical scene, an analogy made visible. Describe the IMAGE, not the topic (\"a single lit doorway at the end of a long dark corridor, one figure walking toward it\"), and never ask for text inside it — labels come out garbled. At most one or two per lesson; a diagram beats a picture whenever the content is structural."
   : '';
 const SIZES = ['s', 'm', 'l', 'xl'];
 
-const TOOLS = [
+const buildTools = () => [
   {
     name: 'update_plan',
     description: 'Create or replace the lesson plan — the visible checklist of goals the learner works through with you. Tasks in the same stage can be tackled in parallel; stages run in order. Keep it 3-8 tasks, concrete and checkable. Use set_task_status for progress instead of recreating the plan.',
@@ -106,7 +107,7 @@ Section bodies are RICH markdown and the renderer is genuinely capable — use i
 - **Callouts** — \`> [!KEY] title\` for the one idea that must stick, \`[!WARNING]\` for the mistake everyone makes, \`[!TIP]\` for a shortcut, \`[!EXAMPLE]\` for a worked case, \`[!QUESTION]\` to make them predict before you tell them.
 - **Maths** with LaTeX between $...$ inline or $$...$$ on its own line. Use real notation, not ASCII.
 - **Charts** in a \`\`\`chart fence containing a Vega-Lite spec ({"data":{"values":[...]},"mark":"bar","encoding":{...}}) when actual numbers tell the story.
-- **Code** in a fenced block with its language tag; it gets syntax highlighting.${IMG_GUIDE}
+- **Code** in a fenced block with its language tag; it gets syntax highlighting.${IMG_GUIDE()}
 
 Aim for a diagram or table in most sections, and at least one callout per lesson. Do not decorate for its own sake — every visual must carry meaning the prose would labour over.`,
     input_schema: {
@@ -495,4 +496,4 @@ function makeExecutors(ctx) {
   };
 }
 
-module.exports = { TOOLS, APP_IDS, SIZES, makeExecutors, applyLayoutActions, DRAFTABLE, TOOL_STATUS, draftScan };
+module.exports = { buildTools, get TOOLS() { return buildTools(); }, APP_IDS, SIZES, makeExecutors, applyLayoutActions, DRAFTABLE, TOOL_STATUS, draftScan };

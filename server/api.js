@@ -3,6 +3,7 @@ const fs = require('fs');
 const { runTurn } = require('./agent.js');
 const tts = require('./tts.js');
 const images = require('./images.js');
+const audit = require('./log.js');
 
 function json(res, code, obj) {
   res.writeHead(code, { 'content-type': 'application/json' });
@@ -59,6 +60,7 @@ function makeApi(store) {
     try {
       return await route(req, res, pathname, query);
     } catch (e) {
+      audit.log('api_exception', { path: pathname, method: req.method, message: audit.trim(e.message || String(e), 400) });
       if (res.headersSent) { try { res.end(); } catch {} return; }
       const bad = /bad json|bad status|required|invalid/i.test(e.message || '');
       return json(res, bad ? 400 : 500, { error: e.message || 'server error' });
@@ -66,6 +68,31 @@ function makeApi(store) {
   }
 
   async function route(req, res, pathname, query) {
+    /* ---------- audit trail ----------
+       Everything the learner did and the agent did back. Token-gated because
+       it contains their words verbatim. */
+    if (req.method === 'GET' && pathname === '/api/log') {
+      if (query.get('t') !== audit.TOKEN) return json(res, 403, { error: 'bad or missing token' });
+      const rows = audit.tail(Number(query.get('n')) || 300, query.get('session'));
+      if (query.get('format') === 'text') {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+        return res.end(rows.map(r => `${r.t} ${r.event.padEnd(12)} ${JSON.stringify({ ...r, t: undefined, event: undefined })}`).join('\n'));
+      }
+      return json(res, 200, { count: rows.length, rows });
+    }
+
+    /* a failure in the browser is as much a part of the trail as one here */
+    if (req.method === 'POST' && pathname === '/api/client-error') {
+      const b = await readJson(req).catch(() => ({}));
+      audit.log('client_error', {
+        session: b.session_id || null,
+        where: audit.trim(String(b.where || ''), 80),
+        message: audit.trim(String(b.message || ''), 300),
+        stack: audit.trim(String(b.stack || ''), 600),
+      });
+      return json(res, 200, { ok: true });
+    }
+
     /* ---------- bootstrap ---------- */
     if (req.method === 'GET' && pathname === '/api/state') {
       /* A plain load always starts fresh — no resuming half an old lesson.
@@ -88,6 +115,7 @@ function makeApi(store) {
         busy: busy.has(session.id),
       });
     }
+
 
     if (req.method === 'POST' && pathname === '/api/session') {
       const b = await readJson(req);
@@ -125,6 +153,7 @@ function makeApi(store) {
       // A long thinking phase can emit nothing for a while; proxies (Cloudflare)
       // drop idle connections. SSE comments keep it alive and are ignored by the client.
       const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 15000);
+      const tlog = audit.turn(sessionId);
 
       // name the journey after what it turned out to be about
       if (/^(New|First) journey$/.test(session.title) && !store.listMessages(sessionId, 1).length) {
@@ -144,12 +173,16 @@ function makeApi(store) {
           // what the learner should see for this event in the transcript —
           // the raw description is written for the model, not for them
           label: b.label ? String(b.label).slice(0, 120) : null,
-          emit, signal: ac.signal, layout,
+          emit, signal: ac.signal, layout, tlog,
         });
         emit({ t: 'done' });
       } catch (e) {
-        if (ac.signal.aborted) emit({ t: 'done', interrupted: true });
-        else { console.error('[chat]', e); emit({ t: 'err', m: e.message }); }
+        if (ac.signal.aborted) { tlog.log('aborted'); emit({ t: 'done', interrupted: true }); }
+        else {
+          tlog.error('turn', e);
+          console.error('[chat]', e);
+          emit({ t: 'err', m: e.message });
+        }
       } finally {
         clearInterval(heartbeat);
         if (inflight.get(sessionId) === ac) inflight.delete(sessionId);
@@ -271,10 +304,10 @@ function makeApi(store) {
     if (req.method === 'GET' && pathname.startsWith('/api/image/')) {
       const hash = pathname.split('/').pop();
       if (!/^[a-f0-9]{64}$/.test(hash)) return json(res, 400, { error: 'bad hash' });
-      const file = images.imagePath(hash);
-      if (!fs.existsSync(file)) return json(res, 404, { error: 'not generated' });
-      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=31536000, immutable' });
-      fs.createReadStream(file).pipe(res);
+      const found = images.imageFile(hash);
+      if (!found) return json(res, 404, { error: 'not generated' });
+      res.writeHead(200, { 'content-type': found.mime, 'cache-control': 'public, max-age=31536000, immutable' });
+      fs.createReadStream(found.path).pipe(res);
       return;
     }
 

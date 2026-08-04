@@ -61,6 +61,20 @@ against them; when a feature conflicts with a commandment, the commandment wins.
 | 6 | `plan` + `plan_task` tables (stages = parallel/sequential), the `update_plan` / `set_task_status` tools, and the `plan` app. The agent is told to advance statuses itself as it teaches; the tile leads with the live goal. |
 | 7 | `server/agent.js` emits `tool_start` the instant a tool call begins and `draft` events parsed from the still-streaming tool input (`draftScan`). The client opens the target tile immediately with an ephemeral status and renders items as they arrive — see `state.draft` in `public/main.js`. |
 
+## Debugging a hosted session
+
+Every interaction is written to `data/audit.jsonl` (gitignored): the turn and
+what was asked, each tool call with its input, each result, API errors, browser
+errors, and timings. Read it live at
+`/api/log?t=<LOG_TOKEN>&format=text&n=200`, optionally `&session=<id>`. The
+token comes from `LOG_TOKEN` in `.env`; without one, a fresh token is minted at
+boot and printed to the console. It is gated because the log contains what the
+learner typed, verbatim.
+
+The client reports its own failures to the same trail (`/api/client-error`, via
+`report()` in `main.js`), because a browser exception used to leave the
+workspace frozen with nothing to look at afterwards.
+
 ## Checking your work
 
 - `public/_states.html` renders **every app in every state** — populated, empty,

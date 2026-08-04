@@ -28,6 +28,24 @@
   };
   const tiles = new Map();
 
+  /* Browser-side failures used to vanish silently — the workspace would just
+     stop and there was nothing to look at afterwards. They now go to the same
+     audit trail as everything else. */
+  function report(where, e) {
+    const detail = { where, message: (e && e.message) || String(e), stack: (e && e.stack || '').slice(0, 800) };
+    console.error('[chameleon]', where, e);
+    try {
+      fetch('api/client-error', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ session_id: state.sessionId, ...detail }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {}
+  }
+  window.addEventListener('error', e => report('window', e.error || e.message));
+  window.addEventListener('unhandledrejection', e => report('promise', e.reason));
+
   const api = async (path, body, method) => {
     const res = await fetch(path.replace(/^\//, ''), {
       method: method || (body ? 'POST' : 'GET'),
@@ -239,6 +257,21 @@
 
   async function playQueue() {
     playing = true;
+    try {
+      await drainQueue();
+    } catch (e) {
+      report('playQueue', e);
+    } finally {
+      playing = false;
+      // whatever happened, never leave the composer stuck mid-turn
+      if (!queue.length && document.body.classList.contains('busy')) {
+        document.body.classList.remove('acting');
+        Chat.turnSettled();
+      }
+    }
+  }
+
+  async function drainQueue() {
     while (queue.length) {
       const ev = queue.shift();
       if (ev.t === '_end') {
@@ -250,12 +283,15 @@
         continue;
       }
       document.body.classList.add('acting'); // history yields to the workspace
-      playStep(ev);
+      // One bad step must never strand the whole turn: without this, a throw
+      // here leaves `playing` true, the queue frozen and the history hidden —
+      // which looks exactly like "it did nothing".
+      try { playStep(ev); }
+      catch (e) { report('playStep:' + ev.t, e); }
       // One thing at a time still, but paced to feel immediate. Narration gets
       // a beat to be read; a layout change just needs to register.
       await sleep(ev.t === 'narrate' ? 900 : queue.length > 2 ? 180 : 360);
     }
-    playing = false;
   }
   // A pressed stop fast-forwards what already arrived so client and server
   // state stay in sync — stopping aborts the agent, not the bookkeeping.

@@ -3,7 +3,8 @@
    events to the client. Zero-dep: raw fetch + hand-rolled SSE parsing. */
 
 const { ENV } = require('./env.js');
-const { TOOLS, makeExecutors, DRAFTABLE, TOOL_STATUS, draftScan } = require('./tools.js');
+const { buildTools, makeExecutors, DRAFTABLE, TOOL_STATUS, draftScan } = require('./tools.js');
+const audit = require('./log.js');
 
 const API_KEY = ENV.ANTHROPIC_API_KEY;
 const MODEL = ENV.CHAMELEON_MODEL || 'claude-opus-5';
@@ -110,7 +111,9 @@ async function streamMessage(body, signal, onTextDelta, onEvent = () => {}) {
   });
   if (!up.ok) {
     const err = await up.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Anthropic API error (${up.status})`);
+    const msg = err?.error?.message || `Anthropic API error (${up.status})`;
+    audit.log('api_error', { status: up.status, message: audit.trim(msg, 400) });
+    throw new Error(msg);
   }
 
   const blocks = [];
@@ -235,15 +238,17 @@ async function runTurn(opts) {
 
   const replyParts = [];
   let iterations = 0;
+  const tlog = opts.tlog || audit.turn(sessionId);
+  tlog.log('turn_start', { kind: kind || 'chat', content: audit.trim(userContent, 400), model: MODEL });
 
   while (true) {
-    if (++iterations > MAX_ITERATIONS) break;
+    if (++iterations > MAX_ITERATIONS) { tlog.log('max_iterations'); break; }
     const body = {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       stream: true,
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-      tools: TOOLS,
+      tools: buildTools(), // rebuilt per turn: capabilities can drop out at runtime
       messages: msgs,
       // summarised reasoning drives the live status line while the model works
       thinking: { type: 'adaptive', display: 'summarized' },
@@ -258,12 +263,19 @@ async function runTurn(opts) {
     }, emit);
 
     if (stopReason === 'refusal') {
+      tlog.log('refusal');
       emit({ t: 'err', m: 'I had to decline that request. Try rephrasing it.' });
       break;
     }
 
     const { content: echoContent, toolIds } = echoSafe(content);
     const toolUses = echoContent.filter(b => b.type === 'tool_use' && toolIds.has(b.id));
+    tlog.log('model_turn', {
+      iteration: iterations,
+      stop: stopReason,
+      tools: toolUses.map(t => t.name),
+      text: audit.trim(content.filter(b => b.type === 'text').map(b => b.text).join(''), 200),
+    });
 
     if (stopReason !== 'tool_use' || !toolUses.length) break;
 
@@ -271,6 +283,7 @@ async function runTurn(opts) {
     for (const tu of toolUses) {
       if (signal.aborted) break;
       let result, isError = false;
+      tlog.tool(tu.name, tu.input);
       try {
         const fn = executors[tu.name];
         if (!fn) throw new Error(`unknown tool ${tu.name}`);
@@ -279,6 +292,7 @@ async function runTurn(opts) {
         result = `Error: ${e.message}`;
         isError = true;
       }
+      tlog.toolResult(tu.name, result, !isError);
       results.push({ type: 'tool_result', tool_use_id: tu.id, content: result, ...(isError ? { is_error: true } : {}) });
     }
     if (signal.aborted) break;
@@ -290,6 +304,7 @@ async function runTurn(opts) {
   const reply = replyParts.join('').trim();
   if (reply) store.addMessage(sessionId, 'assistant', reply, 'chat');
   else if (signal.aborted) store.addMessage(sessionId, 'assistant', '*(interrupted)*', 'chat');
+  tlog.end({ iterations, replyChars: reply.length, aborted: signal.aborted, artifacts: store.listArtifacts(sessionId).length });
   return reply;
 }
 

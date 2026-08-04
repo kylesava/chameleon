@@ -113,8 +113,15 @@ server.on('error', e => {
   throw e;
 });
 
+const audit = require('./log.js');
+const images = require('./images.js');
+
 server.listen(PORT, () => {
   console.log(`Chameleon → http://localhost:${PORT}   (demo: /demo/)`);
+  console.log(`audit log  → /api/log?t=${audit.TOKEN}&format=text${audit.mintedToken ? '   (set LOG_TOKEN in .env to pin it)' : ''}`);
+  const img = images.status();
+  console.log(`images     → ${img.configured ? img.provider : 'off (no key)'}`);
+  audit.log('boot', { port: PORT, images: img.provider || null });
   if (!ENV.ANTHROPIC_API_KEY) console.warn('WARNING: no ANTHROPIC_API_KEY in .env — the agent will fail.');
   if (!ENV.ELEVENLABS_API_KEY) console.warn('note: no ELEVENLABS_API_KEY — podcast audio disabled.');
 });

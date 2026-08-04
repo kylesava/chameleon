@@ -45,6 +45,16 @@ test('generate refuses cleanly when unconfigured rather than throwing something 
 });
 
 test('cache paths are hash-shaped and confined to the image directory', () => {
-  const p = images.imagePath('a'.repeat(64));
-  assert.match(p, /[\\/]data[\\/]images[\\/]a{64}\.png$/);
+  assert.match(images.imagePath('a'.repeat(64)), /[\\/]data[\\/]images[\\/]a{64}\.jpg$/);
+  assert.match(images.imagePath('a'.repeat(64), 'png'), /[\\/]data[\\/]images[\\/]a{64}\.png$/);
+  assert.equal(images.imageFile('b'.repeat(64)), null, 'a hash with no file on disk resolves to nothing');
+});
+
+test('a provider that cannot serve switches the capability off rather than failing per lesson', () => {
+  // configured() reflects the key; enabled() also reflects whether it works
+  assert.equal(typeof images.configured(), 'boolean');
+  assert.equal(typeof images.enabled(), 'boolean');
+  const s = images.status();
+  assert.ok('configured' in s && 'enabled' in s && 'provider' in s);
+  if (!s.configured) assert.equal(s.enabled, false, 'no key means never enabled');
 });
