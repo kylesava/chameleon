@@ -2,6 +2,7 @@
 const fs = require('fs');
 const { runTurn } = require('./agent.js');
 const tts = require('./tts.js');
+const images = require('./images.js');
 
 function json(res, code, obj) {
   res.writeHead(code, { 'content-type': 'application/json' });
@@ -235,6 +236,30 @@ function makeApi(store) {
       } catch (e) {
         return json(res, 502, { error: e.message });
       }
+    }
+
+    /* ---------- generated illustration ----------
+       Resolved lazily from the client so a lesson isn't held up while several
+       images render; each lands in place as it finishes. */
+    if (req.method === 'POST' && pathname === '/api/image') {
+      if (!images.enabled()) return json(res, 501, { error: 'image generation not configured' });
+      const b = await readJson(req);
+      try {
+        const hash = await images.generate(b.prompt, b.aspect);
+        return json(res, 200, { url: `api/image/${hash}` });
+      } catch (e) {
+        return json(res, 502, { error: e.message });
+      }
+    }
+
+    if (req.method === 'GET' && pathname.startsWith('/api/image/')) {
+      const hash = pathname.split('/').pop();
+      if (!/^[a-f0-9]{64}$/.test(hash)) return json(res, 400, { error: 'bad hash' });
+      const file = images.imagePath(hash);
+      if (!fs.existsSync(file)) return json(res, 404, { error: 'not generated' });
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=31536000, immutable' });
+      fs.createReadStream(file).pipe(res);
+      return;
     }
 
     if (req.method === 'GET' && pathname.startsWith('/api/audio/')) {

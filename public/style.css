@@ -782,6 +782,22 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 .lesson-body hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 .lesson-body .md-h { font: 600 12px 'IBM Plex Sans', sans-serif; color: var(--text); margin: 14px 0 6px; letter-spacing: -0.1px; }
 
+/* generated illustration */
+.genimg { margin: 12px 0; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); }
+.genimg img { display: block; width: 100%; height: auto; animation: msg-in 460ms var(--ease-spring); }
+.genimg figcaption { padding: 7px 11px; font-size: 10.5px; color: var(--text-faint); border-top: 1px solid var(--line); }
+.genimg-wait {
+  aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; gap: 9px;
+  font: 500 11px 'IBM Plex Sans', sans-serif; color: var(--text-faint);
+  background: repeating-linear-gradient(115deg, rgba(255,255,255,0.028) 0 12px, transparent 12px 24px);
+}
+.genimg-wait i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+.genimg-failed .genimg-wait { aspect-ratio: 6 / 1; color: var(--warn); }
+.genimg-failed .genimg-wait i { background: var(--warn); animation: none; }
+
 /* diagrams, charts and maths */
 .viz {
   margin: 12px 0; padding: 10px;
@@ -1001,6 +1017,23 @@ pre.code[data-lang]::after {
 .sl-body .viz svg, .sl-col .viz svg { max-height: 300px; }
 .deck:fullscreen .sl-body .viz svg, .deck:fullscreen .sl-col .viz svg { max-height: 62vh; }
 .deck:fullscreen .deck-slide { padding: 40px 56px; }
+
+/* an image slide is the picture, with the title floated over it */
+.sl-image { position: relative; padding: 0; margin: -22px -26px; height: calc(100% + 44px); }
+.sl-image h2 {
+  position: absolute; left: 26px; right: 26px; top: 20px; z-index: 2;
+  border: 0; padding: 0; margin: 0;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.85);
+}
+.sl-image .sl-body { height: 100%; }
+.sl-image .genimg { margin: 0; height: 100%; border: 0; border-radius: 0; }
+.sl-image .genimg img { height: 100%; object-fit: cover; }
+.sl-image .genimg-wait { height: 100%; aspect-ratio: auto; }
+.sl-image figcaption {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  border: 0; padding: 26px 26px 16px; font-size: 12px; color: var(--text-dim);
+  background: linear-gradient(180deg, transparent, rgba(10, 12, 16, 0.92));
+}
 
 .deck-notes {
   flex: 0 0 auto; margin-top: 8px; padding: 8px 11px;

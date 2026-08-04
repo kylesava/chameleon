@@ -3,7 +3,15 @@
    one-at-a-time action queue, and returns a short factual string the model
    reads as the tool_result. */
 
+const images = require('./images.js');
+
 const APP_IDS = ['plan', 'sources', 'lesson', 'quiz', 'flashcards', 'podcast', 'deck'];
+
+/* Only advertise illustrations when there's a key to draw them with —
+   otherwise every lesson would come back peppered with dead placeholders. */
+const IMG_GUIDE = images.enabled()
+  ? "\n- **Generated illustration** with `![short caption](gen:what to draw)` — an image model draws it in the workspace's own dark editorial style. Use it for what a diagram cannot carry: the feel of a concept, a physical scene, an analogy made visible. Describe the IMAGE, not the topic (\"a single lit doorway at the end of a long dark corridor, one figure walking toward it\"), and never ask for text inside it — labels come out garbled. At most one or two per lesson; a diagram beats a picture whenever the content is structural."
+  : '';
 const SIZES = ['s', 'm', 'l', 'xl'];
 
 const TOOLS = [
@@ -98,7 +106,7 @@ Section bodies are RICH markdown and the renderer is genuinely capable — use i
 - **Callouts** — \`> [!KEY] title\` for the one idea that must stick, \`[!WARNING]\` for the mistake everyone makes, \`[!TIP]\` for a shortcut, \`[!EXAMPLE]\` for a worked case, \`[!QUESTION]\` to make them predict before you tell them.
 - **Maths** with LaTeX between $...$ inline or $$...$$ on its own line. Use real notation, not ASCII.
 - **Charts** in a \`\`\`chart fence containing a Vega-Lite spec ({"data":{"values":[...]},"mark":"bar","encoding":{...}}) when actual numbers tell the story.
-- **Code** in a fenced block with its language tag; it gets syntax highlighting.
+- **Code** in a fenced block with its language tag; it gets syntax highlighting.${IMG_GUIDE}
 
 Aim for a diagram or table in most sections, and at least one callout per lesson. Do not decorate for its own sake — every visual must carry meaning the prose would labour over.`,
     input_schema: {
@@ -201,7 +209,7 @@ Choose a layout per slide and fill only that layout's fields:
 - "bullets" — title + bullets (3-5, each under ~10 words; they are talking points, not paragraphs).
 - "focus" — title + body, where body is one big idea: a mermaid diagram, a chart, a table, or a short statement. This is your workhorse for anything visual.
 - "split" — title + left + right markdown. For before/after, problem/solution, theory/practice.
-- "quote" — quote + optional attribution. A single arresting line, full bleed.
+- "quote" — quote + optional attribution. A single arresting line, full bleed.${images.enabled() ? '\n- "image" — title + body, where body is a single `![caption](gen:what to draw)` illustration, shown full bleed with the title over it. Use it to open a section, to sit on an analogy, or to rest the eye between dense slides. One or two per deck.' : ''}
 
 Slide bodies, left/right and bullets all take the same rich markdown the lesson uses: mermaid fences, chart fences, tables, $maths$, code, callouts. A deck of nothing but bullet lists is a bad deck — carry the argument with diagrams and comparisons, and let each slide make exactly one point.
 
@@ -218,7 +226,7 @@ Always write "notes" for each slide: what the presenter should actually say. Tha
             type: 'object',
             required: ['layout'],
             properties: {
-              layout: { type: 'string', enum: ['title', 'bullets', 'focus', 'split', 'quote'] },
+              layout: { type: 'string', enum: images.enabled() ? ['title', 'bullets', 'focus', 'split', 'quote', 'image'] : ['title', 'bullets', 'focus', 'split', 'quote'] },
               title: { type: 'string' },
               subtitle: { type: 'string' },
               bullets: { type: 'array', items: { type: 'string' } },

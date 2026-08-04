@@ -13,6 +13,12 @@
   function inline(s) {
     return esc(s)
       .replace(/`([^`]+)`/g, '<code>$1</code>')
+      // ![alt](gen:a visual prompt) is an illustration the server will draw;
+      // it renders as a placeholder and fills in when it arrives.
+      // NB: the source is already escaped by the esc() above — escaping the
+      // prompt again would send &quot; to the image model.
+      .replace(/!\[([^\]]*)\]\(gen:([^)]+)\)/gi, (_, alt, prompt) =>
+        `<figure class="genimg" data-prompt="${prompt.trim()}" data-alt="${alt}"><div class="genimg-wait"><i></i><span>drawing…</span></div>${alt ? `<figcaption>${alt}</figcaption>` : ''}</figure>`)
       .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) => /^https?:\/\//.test(src) ? `<img alt="${alt}" src="${src}" loading="lazy">` : alt)
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, href) => /^(https?:|#|\/)/.test(href) ? `<a href="${href}" target="_blank" rel="noopener">${t}</a>` : t)
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
@@ -135,7 +141,10 @@
       while (i < lines.length && lines[i].trim() && !/^\s*(#{1,6}\s|>|```|[-*•]\s|\d+[.)]\s)/.test(lines[i]) && !(lines[i].includes('|') && isTableSep(lines[i + 1] || ''))) {
         para.push(lines[i++]);
       }
-      out += `<p>${inline(para.join(' '))}</p>`;
+      // a line that is only a figure/image is a block in its own right —
+      // wrapping it in <p> produces invalid nesting the browser then unpicks
+      const html = inline(para.join(' '));
+      out += /^\s*<(figure|img)\b[\s\S]*$/.test(html) && !/<\/p>/.test(html) ? html : `<p>${html}</p>`;
     }
     return out;
   }
@@ -337,9 +346,44 @@
   /* Idempotent: safe to call after every streaming repaint. Each mounted node
      is marked, and failures degrade to the readable source rather than an
      error graphic. */
+  /* Illustrations are requested one at a time so a lesson with several does
+     not fire a burst of expensive calls, and each appears the moment it is
+     ready rather than all at the end. */
+  let imgChain = Promise.resolve();
+  async function mountImages(root) {
+    const nodes = [...root.querySelectorAll('.genimg:not([data-done])')];
+    for (const n of nodes) {
+      n.setAttribute('data-done', '1');
+      const prompt = n.getAttribute('data-prompt');
+      if (!prompt) continue;
+      imgChain = imgChain.then(async () => {
+        try {
+          const r = await fetch('api/image', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ prompt, aspect: n.dataset.aspect || '16:9' }),
+          });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || 'image failed');
+          if (!n.isConnected) return;
+          const img = new Image();
+          img.alt = n.getAttribute('data-alt') || '';
+          img.loading = 'lazy';
+          img.onload = () => { n.querySelector('.genimg-wait')?.remove(); n.prepend(img); n.classList.add('ready'); };
+          img.src = j.url;
+        } catch (e) {
+          n.classList.add('genimg-failed');
+          const w = n.querySelector('.genimg-wait span');
+          if (w) w.textContent = 'illustration unavailable';
+        }
+      });
+    }
+    return imgChain;
+  }
+
   function enhance(root) {
     if (!root || typeof document === 'undefined') return Promise.resolve();
-    return Promise.allSettled([mountMermaid(root), mountCharts(root), mountCode(root), mountMath(root)]);
+    return Promise.allSettled([mountMermaid(root), mountCharts(root), mountCode(root), mountMath(root), mountImages(root)]);
   }
 
   return { md, inline, esc, loadScript, loadCss, enhance, CALLOUT, CDN, MERMAID_THEME, VEGA_DARK };

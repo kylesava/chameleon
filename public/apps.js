@@ -522,6 +522,8 @@
         return `<div class="sl sl-bullets">${t}<ul>${(s.bullets || []).map(b => `<li>${Rich.inline(b)}</li>`).join('')}</ul></div>`;
       case 'split':
         return `<div class="sl sl-split">${t}<div class="sl-cols"><div class="sl-col">${md(s.left || '')}</div><div class="sl-col">${md(s.right || '')}</div></div></div>`;
+      case 'image':
+        return `<div class="sl sl-image">${t}<div class="sl-body">${md(s.body || '')}</div></div>`;
       default:
         return `<div class="sl sl-focus">${t}<div class="sl-body">${md(s.body || '')}</div></div>`;
     }
