@@ -116,7 +116,16 @@
     sourceAdded: src => { state.sources.push(src); dirty('sources'); },
     sourceRemoved: id => { state.sources = state.sources.filter(s => s.id !== id); dirty('sources'); },
     planChanged: plan => { state.plan = plan; paintPlan(); },
-    planResized: () => relayout(),
+    /* chatPlan() repaints on every streamed draft frame. Relayouting each
+       time made the windows strobe while a plan was being written, so only a
+       real change in the spine's height is allowed to move the grid. */
+    planResized: () => {
+      const el = document.getElementById('chat-plan');
+      const h = el ? Math.round(el.offsetHeight) : 0;
+      if (h === lastPlanH) return;
+      lastPlanH = h;
+      relayout();
+    },
   });
 
   Chat.configure({
@@ -407,6 +416,7 @@
      it; Kyle keeps it in a window beside the lesson and the quiz. Which one is
      a setting, so neither has to live with the other's preference. */
   const chatPlanEl = document.getElementById('chat-plan');
+  let lastPlanH = -1;
   const planInChat = () => (state.profile || {}).planPlace === 'chat';
 
   function paintPlan() {

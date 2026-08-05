@@ -1,3 +1,8 @@
+> **Note.** This document grew as a series of updates, newest at the bottom.
+> For the *current* state of the product read [STATE.md](STATE.md); for the code
+> map read [ARCHITECTURE.md](ARCHITECTURE.md). What follows is the reasoning
+> behind the learner model, kept because the reasoning is the valuable part.
+
 # Adapting to the person — design
 
 *Written Aug 2026, from Matt's feedback after the first hosted play-through.*

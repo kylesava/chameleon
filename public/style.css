@@ -2151,3 +2151,39 @@ body.canvas-chat.talk-folded #talk-tab { display: flex; }
 }
 #talk-tab:hover { width: 40px; background: linear-gradient(180deg, #222836, #171c26); }
 #talk-tab:hover span { color: var(--text-dim); }
+
+/* ---------------- corrections ----------------
+   The spine is a PINNED MESSAGE inside the transcript, not a card bolted above
+   the composer: it lives in the same column as everything else the agent says,
+   scrolls with it, and moves centre→left with it. */
+body.canvas-chat #chat-plan {
+  width: auto !important; max-width: 100%;
+  margin: 0 0 4px !important; padding: 0;
+  position: static !important; z-index: auto !important;
+  order: -1;                      /* the plan sits at the top of the transcript */
+}
+body.canvas-chat #chat-plan[hidden] { display: none !important; }
+/* the wrap holds the pinned spine and the scrolling transcript, in one column */
+body.canvas-chat #chat-log-wrap { display: flex; flex-direction: column; }
+body.canvas-chat #chat-log { flex: 1 1 auto; min-height: 0; }
+
+/* the agent's words are the content — they read white, not grey */
+body.canvas-chat .msg.agent .bubble { color: var(--text); }
+body.canvas-chat .msg.user .bubble { color: var(--text); opacity: 0.72; }
+body.canvas-chat #chat-log { color: var(--text); }
+
+/* No opacity games on live text — fading a scrolling transcript over a dotted
+   canvas is what made it look glitchy. Windows are opaque and simply cover it. */
+body.canvas-chat.has-apps #chat-log,
+body.canvas-chat.acting #chat-log { opacity: 1; }
+body.canvas-chat #chat-log { transition: none; }
+/* the pinned chip belongs with the transcript it filters, not floating above
+   the composer */
+body.canvas-chat #pinned-btn {
+  position: absolute; z-index: 6;
+  margin: 0; align-self: auto;
+}
+body.canvas-chat:not(.has-apps) #pinned-btn { left: 50%; transform: translateX(-50%); top: 14px; }
+body.canvas-chat.has-apps #pinned-btn { left: 18px; transform: none; top: 14px; }
+body.canvas-chat.has-apps #chat-log-wrap { top: 48px; max-height: calc(100% - 190px); }
+body.canvas-chat:not(.has-apps) #chat-log-wrap { padding-top: 34px; }

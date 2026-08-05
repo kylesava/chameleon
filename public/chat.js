@@ -179,6 +179,8 @@
   function countPins() {
     return log.querySelectorAll('.msg.pinned').length
       + (planEl && planEl.classList.contains('pinned') && !planEl.hidden ? 1 : 0);
+    // (the spine is inside the log now, so it is already counted above when
+    // it carries .msg.pinned — this guards the case where it is not)
   }
   function syncPins() {
     const n = countPins();

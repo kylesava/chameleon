@@ -2,8 +2,13 @@
 
 A **goal-oriented AI learning workspace**: you say what you want to learn, the
 agent builds a visible lesson plan and teaches it, reshaping the UI as it goes.
-Being built into a **company** (Kyle + partner). See [README.md](README.md) to
-run it and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together.
+Being built into a **company** (Kyle + Matt).
+
+**Start here:** [docs/STATE.md](docs/STATE.md) — what is built, what is
+unfinished, and the traps that will waste your afternoon.
+Then [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the code map,
+[README.md](README.md) to run it, and [docs/ADAPTIVE.md](docs/ADAPTIVE.md) for
+why the learner model exists.
 
 The original adaptive **sales** workspace is frozen under `demo/` (served at
 `/demo/`). It was the POC that proved the interaction model; the real app
@@ -77,13 +82,6 @@ the short version:
   chat moves it. Asking a stranger to configure a product they have not used
   yet was friction dressed as personalisation. (Was: one question, once — see
   `public/gate.js`)
-- ~~**One question, once**~~ (`public/gate.js`): *how much at once?* — one thing at
-  a time / a steady pace / everything at once. That is the whole of onboarding.
-  Everything else is learned from use or said in the chat, because a
-  questionnaire in front of someone who wants to start is friction, and the
-  answers were guesses anyway. It deliberately never asks how much someone
-  already knows: nobody is uniformly a beginner or an expert, so
-  `priorKnowledge` is a default the agent overrides per topic.
 - **ONE control, and everything hangs off it.** A mode (`simple` / `balanced` /
   `extreme`, see `MODES` in `server/profile.js`) is a named bundle of every
   other setting. The individual parameters still exist, are still tracked, and

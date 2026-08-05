@@ -1,165 +1,266 @@
-# Chameleon MVP — architecture
+# Chameleon — architecture
 
-*Written Aug 2026, at the pivot from sales-demo POC to real product.*
+The code map. Read [STATE.md](STATE.md) first for what is built and what is
+not; read [../CLAUDE.md](../CLAUDE.md) for the product rules that constrain
+every change.
 
-## What Chameleon is now
+---
 
-A **goal-oriented personal-enablement workspace**: you tell the agent what you
-want to learn, it builds a **lesson plan** (a checklist of goals you can see and
-mark off), and it teaches you — opening, filling and rearranging learning tools
-on the adaptive grid, one thing at a time, quizzing you and adapting the plan as
-you progress. Think NotebookLM's grounding + a live tutor + the Chameleon
-canvas.
+## The one-paragraph version
 
-The sales demo (the original POC) is preserved read-only under `demo/`, served
-at `/demo/`. Nothing in it is imported by the real app. The only things carried
-forward are the **UI behaviors**: the grid solver, tile drag/resize physics,
-the design system, and streamed agent actions.
+You tell an agent what you want to do. Small asks get **answered**. Bigger ones
+get a **plan** — a visible spine of steps — which the agent works through with
+you, opening **app windows** (lesson, quiz, flashcards, deck, podcast, notebook)
+on an adaptive grid and narrating as it goes. The **conversation is the
+background**; apps float on top of it. How much happens at once, whether it
+waits for you, and where the plan lives are **per-user settings** the agent can
+learn or simply be told.
 
-The six UX Commandments in [CLAUDE.md](../CLAUDE.md) are the constitution.
+One Node process, one SQLite file, zero npm dependencies, no build step.
+
+---
 
 ## Repo layout
 
 ```
-server.js            entry point — requires server/index.js  (node server.js)
+server.js              entry point — requires server/index.js
 server/
-  index.js           HTTP server, static files, route dispatch (app + demo)
-  env.js             .env loader (shared)
-  db.js              node:sqlite open + schema migrations
-  store.js           all reads/writes: sessions, messages, plans, sources,
-                     artifacts, quiz attempts, workspace snapshots
-  agent.js           the Anthropic agent loop — streaming, multi-tool,
-                     executes tools server-side, emits SSE events
-  tools.js           tool schemas + executors (the agent's hands)
-  tts.js             ElevenLabs synthesis + on-disk audio cache
-  api.js             route handlers: /api/* (REST + SSE)
-demo/                the frozen sales POC — served at /demo/, own /demo/api/*
-  chat.js crm.js routes.js public/
-public/              the real app
-  index.html
-  style.css          design system (tokens carried over from the POC)
-  layout.js          grid solver — UNCHANGED from the POC (shared w/ tests)
-  apps.js            learning-app registry + renderers
-  chat.js            fused composer + history + stop control
-  main.js            orchestrator: tiles, drag/resize, SSE client, action queue
-data/                (gitignored) chameleon.db + audio/ cache
-test/                node --test: solver, store, agent protocol, tts cache
-docs/                this file
+  index.js             HTTP server, static files, route dispatch, user seeding
+  api.js               every /api/* route, the SSE turn, ownership guards
+  agent.js             the SYSTEM prompt + the streaming tool-use loop
+  tools.js             tool schemas + executors (the agent's hands)
+  profile.js           the learner model: modes, stated/observed/effective
+  auth.js              scrypt passwords, HMAC cookie sessions
+  store.js             all reads and writes
+  db.js                node:sqlite open + idempotent migrations
+  env.js               .env loader (process env wins)
+  images.js            generated illustrations (Gemini / OpenAI)
+  tts.js               ElevenLabs podcast audio
+  log.js               JSONL audit trail
+public/
+  index.html           the whole DOM
+  main.js              orchestrator: state, layout, the action queue, settings
+  chat.js              the conversation surface + SSE reader + pinning
+  apps.js              app registry + every renderer + the chat-resident plan
+  annotate.js          mark anything in an app and talk to the agent about it
+  richtext.js          markdown engine + lazy Mermaid/KaTeX/Vega/hljs mounting
+  layout.js            the grid solver
+  gate.js              sign-in
+  style.css            everything visual
+test/
+  drive.js             zero-dependency Chrome DevTools driver (see below)
+  *.test.js            unit + browser tests
+  persona-*.test.js    whole journeys against the live API (PERSONA=1 only)
+tools/reset-demo.js    put the demo accounts back to a first-visit state
+demo/                  the frozen sales POC, served at /demo/. Do not touch.
 ```
 
-Zero npm dependencies stays. Node **24+** required (`node:sqlite`).
+---
 
 ## Backend
 
-### Storage (`node:sqlite`, `data/chameleon.db`)
+### The turn
 
-One DB, one process — same constraint as savky.dev's proxy. Tables:
+`POST /api/chat` opens an **SSE stream** and runs `runTurn` in `agent.js`:
 
-- **session** — a learning journey (`id, title, layout_json, created_at, updated_at`).
-  The workspace layout snapshot lives here so reload restores the canvas.
-- **message** — full chat history (`session_id, role, kind, content, app, created_at`).
-  `kind` distinguishes `chat` / `narration` (agent talking inside an app window,
-  mirrored here per commandment 3) / `event` (user did something in an app).
-- **plan** + **plan_task** — the spine (commandment 6). A plan has ordered
-  tasks; each task has a `stage` int — tasks sharing a stage are parallel,
-  stages are sequential — plus `status` (todo/doing/done) and `detail`.
-  Latest plan per session is the active one.
-- **source** — the notebook (`kind` text/url/note, `title`, `content`). URL
-  sources are fetched server-side and reduced to text. The agent treats sources
-  as ground truth, the same way the POC treated the CRM.
-- **artifact** — generated learning content (`app` lesson/flashcards/quiz/podcast,
-  `title`, `data` JSON). Tiles render artifacts; artifacts survive reload.
-- **quiz_attempt** — answers + score per quiz artifact, so the agent sees what
-  you got wrong and adapts the plan.
+1. Build the system prompt: a **cached** block (`SYSTEM`) plus an uncached
+   per-learner **brief** from `profile.brief(effective)`.
+2. Stream from the Messages API with tool use.
+3. As each tool call's input streams in, `draftScan` parses the partial JSON and
+   emits `draft` events — that is how a quiz appears question by question rather
+   than after a spinner (commandment 7).
+4. Execute the tool, emit its effects, feed the result back, repeat.
 
-### Agent loop (`agent.js`) — the real change from the POC
+Events on the wire: `thinking`, `tool_start`, `draft`, `action`, `plan`,
+`artifact`, `narrate`, `source`, `preference`, `say`, `err`, `done`.
 
-The POC forced one `update_workspace` tool call and made the *client* parse the
-streaming JSON. The MVP runs a **real server-side tool loop**:
+The client turns `action`/`plan`/`artifact`/`narrate` into a **one-at-a-time
+queue** (commandment 2). `thinking`/`tool_start`/`draft` bypass it, because they
+are a live view of the current step rather than a competing step.
 
-1. Build context: system prompt + sources digest + active plan + workspace
-   snapshot + recent history (persisted, not client-supplied).
-2. Stream from the Messages API. Text deltas forward to the client as `say`
-   events. When a `tool_use` block completes, its **executor** runs server-side
-   (persist artifact, update plan, record layout change), and a semantic event
-   is emitted to the client.
-3. On `stop_reason: "tool_use"`, append `tool_result`s and continue the loop;
-   on `end_turn`, persist the assistant message and emit `done`.
-4. The whole loop is under an `AbortController` — when the client disconnects
-   (the user hit stop — commandment 4/1), the upstream request aborts and the
-   turn is recorded as interrupted.
+A new turn for a busy session **takes over** the old one (`takeover()`) rather
+than erroring — interruption, not rejection (commandment 1).
 
-Tools (all inputs validated; executors in `tools.js`):
+### Enforcement, not persuasion
 
-| tool | effect |
+Anything a model could talk itself out of is checked in `makeExecutors`
+(`tools.js`) **before anything is written**:
+
+| Rule | Where |
 |---|---|
-| `update_plan` | create/replace the plan, or set task statuses; emits `plan` |
-| `open_app` / `close_app` / `resize_app` / `focus_app` | layout actions; emit `action` |
-| `narrate` | say something *inside* an app window; persisted to history |
-| `create_lesson` | markdown lesson artifact (sections) → opens the lesson app |
-| `create_flashcards` | deck artifact |
-| `create_quiz` | quiz artifact (multiple-choice w/ explanations + free-response) |
-| `create_podcast` | two-host script artifact; audio synthesized on demand |
-| `add_note` | append a note source to the notebook |
+| At most `maxApps` working windows per turn | `withinBudget` / `chargeFor` |
+| Windows the learner switched off are unavailable | `permitted` / `notAllowed` |
+| The plan window is exempt from the budget | `permitted('plan')` |
+| The agent may not close the plan window | `layout` executor |
+| With the plan in chat there is no plan tile at all | `planInChat` |
+| Every step must carry a `done_when` | `update_plan` throws |
+| Nothing is persisted before those checks pass | each `create_*` |
 
-SSE protocol to the client:
-`{t:'say', d}` · `{t:'action', a}` · `{t:'narrate', app, text}` ·
-`{t:'plan', plan}` · `{t:'artifact', app, artifact}` · `{t:'done'}` · `{t:'err', m}`.
+A thrown executor error comes back as an `is_error` tool result, so the model
+sees the refusal and corrects itself inside the same turn.
 
-The client **plays these one at a time** (commandment 2): a serialized queue
-with ~700 ms pacing, each step visually focused. The server streams as fast as
-it can; pacing is presentation, not backpressure.
+### Data
 
-User interactions inside apps (checked a task, answered a quiz, clicked a
-section) POST as events; they become `[UI EVENT]` user turns exactly like the
-POC — that pattern worked and stays.
+One SQLite file, `data/chameleon.db`. Tables: `user`, `session`, `message`,
+`plan`, `plan_task`, `source`, `artifact`, `quiz_attempt`, `signal`.
 
-### TTS (`tts.js`)
+`user.profile_json` holds the learner model. Everything else hangs off
+`session`, and **every route that takes a session id goes through `mine(sid)`**
+in `api.js` — one guard applied everywhere, so a stale or guessed id cannot
+reach another user's work.
 
-ElevenLabs, key in `.env` (`ELEVENLABS_API_KEY`). `POST /api/tts` synthesizes
-one podcast line (text+voice), cached at `data/audio/<sha256>.mp3`, served at
-`/api/audio/<hash>`. Two host voices; the client plays the script as a playlist
-of per-line clips (no server-side audio stitching — zero-dep).
+### The learner model (`profile.js`)
+
+Three layers:
+
+- **`stated`** — what they chose, or were coached into.
+- **`observed`** — what they actually do: windows closed within 15s, "I'm
+  stuck", "I'm ready", quiz scores, which windows get used.
+- **`effective`** — the blend, weighted by `confidenceOf` (roughly a dozen
+  completed steps before observation outweighs what they said).
+
+**Only `effective` is read at runtime**, and it crosses the wire in exactly one
+shape (`shapeProfile` in `api.js`): `{ onboarded, stated, effective }`.
+
+A **mode** is a named bundle of every tuned parameter — `slow-walk`, `walk`,
+`run`, `sprint`, in that order — rendered as one dial. `modeOf()` derives which
+one a profile matches, or `custom` when hand-tuned.
+
+---
 
 ## Frontend
 
-### Chat (commandments 1, 4, 5)
+### The surface
 
-The POC's four morphing chat modes are **gone**. One fused surface: a centered
-bottom composer, always present; the history column rises above it when
-conversing. When the agent starts acting in apps, **history slides away** —
-the workspace is the focus, narration happens in the app windows — leaving the
-composer with a working indicator that **is the stop button**. When the turn
-ends (or is stopped), history returns, including the mirrored narrations.
-Empty session = centered hero with the big input.
+**The conversation is the canvas.** The transcript is text painted across the
+background *underneath* the app windows; the composer is the only container.
+Apps are opaque and float on top, so as they fill the screen they cover the
+conversation — that is the "dissolve", not a rule that hides it.
 
-### Action queue (commandment 2)
+Where the transcript sits follows the work, not a preference:
 
-All agent events enter one queue. One step at a time: apply the layout change
-or narration, focus the touched tile, ring it (the POC's hue-tinted sonar
-waves), wait ~700 ms, next. The stop button flushes the queue and aborts the
-stream. Nothing in the UI ever animates two agent steps at once.
+- nothing open → centred
+- any app open → a column on the left, until the last window closes
+- folded → collapses into the left wall as a chameleon tab; click to restore
 
-### Learning apps (`apps.js` registry — same spec shape as the POC)
+The plan, when it lives in the conversation, is a **pinned message at the top of
+that column** — same place as everything else the agent says. The composer is
+separately dockable (`place-center/left/right/mini`).
 
-| app | what it is | interactivity |
-|---|---|---|
-| `plan` | the lesson plan: staged checklist, progress ring, current task lit | check/uncheck → event; agent adapts |
-| `sources` | the notebook: paste text, add URL (server-fetched), notes | add/remove → agent re-grounds |
-| `lesson` | rendered markdown lesson, sectioned | click a section → "go deeper" event |
-| `quiz` | MC with instant check + explanations; free-response graded by agent | submit → event with answers; score persists |
-| `flashcards` | deck with flip; "got it / again" spaced repetition-lite | deck state persists; "harder" → event |
-| `podcast` | two-host audio overview, chapter list, real ElevenLabs playback | chapter click → event |
+> **Stacking gotcha.** `#chatdock` must not set a `z-index`, or it creates a
+> stacking context its children can never escape — they cannot rise above
+> `.tile` (z-index 2) however high their own z-index. The transcript sits at 1,
+> the agent's furniture at 5, and the dock itself takes no part.
 
-Tile chrome, drag-anywhere move/resize, min-size guides, shake + sonar,
-`solve()` — all carried over from the POC unchanged in behavior.
+> **Measurement gotcha.** `metrics()` must measure the element the tiles are
+> positioned inside (`#workspace`), not the stage around it. When the two
+> disagree, tiles are drawn wider than the box holding them. And when the
+> transcript holds the left column the grid must be both narrowed **and**
+> shifted — narrowing alone draws tiles underneath it.
 
-## Decisions & non-goals (MVP)
+> **Click-through gotcha.** The dock is `pointer-events: none` so the canvas
+> stays reachable; every interactive child must opt back in.
 
-- **No auth yet.** Same posture as the POC. Before promoting the public
-  `/cmln` link beyond friendly traffic, add a simple password gate (like
-  bar.savky.dev). Tracked, not built.
-- **No accounts/multi-user.** One person's workspace per deployment.
-- **Sessions are cheap**: a topbar switcher lists journeys, creates new ones.
-- **Model**: `CHAMELEON_MODEL` env (Anthropic), prompt-cached system block.
-- **The demo is frozen.** Bug reports against `/demo/` are wontfix.
+> **Re-render gotcha.** `renderHistory` clears `#chat-log`. Anything that must
+> survive a history re-render lives in `#chat-log-wrap`, outside it — which is
+> where `#chat-plan` sits.
+
+### The action queue
+
+Every server event enters one queue in `main.js` and plays with deliberate
+spacing, one focus at a time. `playQueue`'s `finally` is a **safety net for a
+crashed queue, not a turn-end detector** — the queue runs dry many times during
+a normal turn, so it checks `Chat.streaming()` before settling. Getting this
+wrong retires the stop button mid-turn and lets a follow-up message abort the
+running one, freezing a half-written window.
+
+`chatPlan()` repaints on every streamed draft frame, so `planResized` only
+relayouts when the spine's height actually changes — otherwise the windows
+strobe while a plan is being written.
+
+### Apps
+
+`REGISTRY` in `apps.js` defines each app's grid sizes, icon, hue and
+description; `R.<app>(el, app)` renders it from session state. Adding an app
+means a registry entry, a renderer, and a `create_<app>` tool.
+
+The plan has **two renderers** — `R.plan` (the window) and `chatPlan` (the
+conversation) — but **one set of actions** (`STEP.advance/stuck/jump`), so the
+two homes cannot drift apart in what they tell the agent.
+
+### Annotations (`annotate.js`)
+
+Select text inside a tile, or alt-click an element, and a composer appears
+anchored to it. Send one immediately, or add to a batch and submit together. The
+agent receives one message quoting exactly what was marked.
+
+> Event targets are not always elements — `mouseup` can land on the document or
+> a text node, and `.closest()` on those throws and kills the listener. Hence
+> the `within()` helper.
+
+### Generated illustrations
+
+Requests are keyed by **prompt, not by node**. A tile repaints on narration,
+status changes and resizes, replacing every node in it — a request tied to its
+node is orphaned on every repaint while the placeholder spins forever. Also: the
+`<img>` must be inserted **before** its `src` is set, because a detached image
+can be deferred indefinitely, so waiting for `onload` to insert it deadlocks.
+
+---
+
+## Testing
+
+`test/drive.js` is a **zero-dependency Chrome DevTools Protocol driver**. It
+clicks with real mouse events, so z-index and pointer-events bugs cannot hide
+behind a synthetic `.click()`.
+
+```js
+const { open, serve, sleep, pickPace } = require('./drive.js');
+const app = await serve();              // own port, own throwaway database
+const br  = await open({ headless: true });
+const p   = await br.page(app.url + '/');
+```
+
+Page methods: `waitFor`, `click`, `fill`, `type`, `key`, `drag`, `box`, `text`,
+`count`, `has`, `eval`, `shot`, plus the ones that catch layout bugs:
+
+- **`topAt(sel)`** — what is actually on top at that element's centre. Proves
+  nothing covers a control. Scrolls it into view first.
+- **`coveredTiles()`** — which app windows the composer sits on top of.
+- **`overflowing()`** — anything spilling out of the viewport.
+- **`p.errors`** — uncaught page exceptions. Assert this is empty.
+
+`serve()` and `open()` both use **ephemeral ports**. Fixed ports meant a server
+left behind by a killed run was still listening, the next run silently attached
+to it, and tests failed against a stranger's database — which reads as flakiness
+and is not.
+
+`persona-*.test.js` drive whole journeys against the live API and are skipped
+unless `PERSONA=1`, so the documented test command costs nothing.
+
+### Debugging a hosted session
+
+Every interaction goes to `data/audit.jsonl`: the turn, each tool call with its
+input, each result, API errors, browser errors, timings. Read it live at
+`/api/log?t=<LOG_TOKEN>&format=text&n=200`. The client reports its own failures
+to the same trail via `/api/client-error`.
+
+`window.__cham` exposes `sessionId()`, `profile()`, `plan()`, `open()` and
+`trace()` — the last a rolling log of every event the client received, which
+distinguishes "the event never arrived" from "the client dropped it".
+
+---
+
+## Deliberate non-goals
+
+- **No build step, no npm dependencies.** Node 24's `node:sqlite` and global
+  `fetch`/`WebSocket` are enough. Keep it that way.
+- **No framework.** One orchestrator and a few renderers is less code than the
+  alternative at this size.
+- **One process, one database.** Never run two instances against the same file.
+- **Visual libraries are CDN-loaded, pinned and lazy** — Mermaid 11.16.0,
+  KaTeX 0.18.1, Vega-Lite 6.4.3, highlight.js 11.11.1. Pin exact versions;
+  floating tags have shipped breaking changes on all four.
+- **Decks use a custom viewer, not reveal.js** — reveal re-measures hidden
+  slides, the documented cause of Mermaid breaking from slide ~4 on.
+- **`demo/` is frozen.** It proved the interaction model. Do not fix bugs in it.
