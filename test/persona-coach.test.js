@@ -13,8 +13,8 @@ const { open, serve, sleep } = require('./drive.js');
 const idle = p => p.waitFor('!document.body.classList.contains("busy")', 300000, 'the agent to finish');
 
 test('coaching: what you ask for in chat becomes a setting and stays one', { timeout: 900000 }, async t => {
-  const app = await serve({ port: 8992 });
-  const br = await open({ headless: true, port: 9421 });
+  const app = await serve();
+  const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 

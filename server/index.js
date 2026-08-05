@@ -131,7 +131,10 @@ const audit = require('./log.js');
 const images = require('./images.js');
 
 server.listen(PORT, () => {
-  console.log(`Chameleon → http://localhost:${PORT}   (demo: /demo/)`);
+  /* PORT=0 asks the OS for a free one, which the tests rely on — so report
+     what we actually bound to, not what we asked for. */
+  const bound = server.address().port;
+  console.log(`Chameleon → http://localhost:${bound}   (demo: /demo/)`);
   console.log(`audit log  → /api/log?t=${audit.TOKEN}&format=text${audit.mintedToken ? '   (set LOG_TOKEN in .env to pin it)' : ''}`);
   const img = images.status();
   console.log(`images     → ${img.configured ? img.provider : 'off (no key)'}`);

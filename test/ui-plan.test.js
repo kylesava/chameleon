@@ -39,7 +39,7 @@ const PLAN = {
 };
 
 test('plan: the current step is unambiguous and every control works', { timeout: 180000 }, async t => {
-  const app = await serve({ port: 8903 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -106,7 +106,7 @@ test('plan: the current step is unambiguous and every control works', { timeout:
 });
 
 test('plan: an empty plan and a finished plan both read sensibly', { timeout: 120000 }, async t => {
-  const app = await serve({ port: 8904 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -132,7 +132,7 @@ test('plan: an empty plan and a finished plan both read sensibly', { timeout: 12
 });
 
 test('plan: the ready button comes back to life when the agent stops working', { timeout: 120000 }, async t => {
-  const app = await serve({ port: 8907 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });

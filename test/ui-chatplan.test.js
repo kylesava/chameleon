@@ -34,7 +34,7 @@ async function asMatt(p, url, answers) {
 }
 
 test('chat spine: the plan is in the conversation and there is no plan window', { timeout: 180000 }, async t => {
-  const app = await serve({ port: 8909 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -95,7 +95,7 @@ test('chat spine: the plan is in the conversation and there is no plan window', 
 });
 
 test('chat spine: Ready advances, I am stuck does not', { timeout: 180000 }, async t => {
-  const app = await serve({ port: 8910 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -126,7 +126,7 @@ test('chat spine: Ready advances, I am stuck does not', { timeout: 180000 }, asy
 });
 
 test('chat spine: switching where the plan lives moves it, both ways', { timeout: 180000 }, async t => {
-  const app = await serve({ port: 8911 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });

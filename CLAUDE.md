@@ -158,6 +158,14 @@ workspace frozen with nothing to look at afterwards.
 
 - **Node 24+**, zero npm dependencies. Keep it that way — no framework, no build step.
 - **One process, one SQLite file** (`data/chameleon.db`). Never run two instances against it.
+- **Generated illustrations are keyed by prompt, never by node.** A tile
+  repaints on narration, status changes and resizes, replacing every node in
+  it. `mountImages` in `public/richtext.js` caches the in-flight request per
+  prompt and paints into whichever node is on screen when it lands — tying the
+  request to the node that started it orphaned it on every repaint and left the
+  placeholder spinning. The `<img>` must also be inserted **before** its `src`
+  is set: a detached image can be deferred indefinitely, so waiting for `onload`
+  to insert it was a deadlock.
 - **Visual libraries are CDN-loaded, pinned, and lazy.** `public/richtext.js` owns
   the markdown engine and mounts Mermaid 11.16.0, KaTeX 0.18.1, Vega-Lite 6.4.3
   and highlight.js 11.11.1 on first use only. Pin exact versions — floating tags

@@ -282,7 +282,7 @@ const openApp = async (p, id) => {
 /* ------------------------------------------------------------------ tests */
 
 test('sweep 1: every app at every size, at three viewports', { timeout: 900000 }, async t => {
-  const app = await serve({ port: 8911 });
+  const app = await serve();
   t.after(async () => { await app.close(); });
   const problems = [];
 
@@ -330,7 +330,7 @@ test('sweep 1: every app at every size, at three viewports', { timeout: 900000 }
 });
 
 test('sweep 2: empty states, and the apps menu at three viewports', { timeout: 600000 }, async t => {
-  const app = await serve({ port: 8912 });
+  const app = await serve();
   t.after(async () => { await app.close(); });
   const problems = [];
   try {
@@ -407,7 +407,7 @@ test('sweep 2: empty states, and the apps menu at three viewports', { timeout: 6
 });
 
 test('sweep 3: the chat dock — drag to every edge, the corner, and collapse', { timeout: 600000 }, async t => {
-  const app = await serve({ port: 8913 });
+  const app = await serve();
   const br = await open({ headless: true, width: 1440, height: 900 });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -519,7 +519,7 @@ test('sweep 3: the chat dock — drag to every edge, the corner, and collapse', 
 });
 
 test('sweep 4: the working status pill never floats over a window', { timeout: 600000 }, async t => {
-  const app = await serve({ port: 8914 });
+  const app = await serve();
   const br = await open({ headless: true, width: 1440, height: 900 });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -561,7 +561,7 @@ test('sweep 4: the working status pill never floats over a window', { timeout: 6
 });
 
 test('sweep 5: windows open and close cleanly, repeatedly', { timeout: 600000 }, async t => {
-  const app = await serve({ port: 8915 });
+  const app = await serve();
   const br = await open({ headless: true, width: 1440, height: 900 });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -629,7 +629,7 @@ test('sweep 5: windows open and close cleanly, repeatedly', { timeout: 600000 },
 });
 
 test('sweep 5b: a closed window stays closed', { timeout: 300000 }, async t => {
-  const app = await serve({ port: 8917 });
+  const app = await serve();
   const br = await open({ headless: true, width: 1440, height: 900 });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -652,7 +652,7 @@ test('sweep 5b: a closed window stays closed', { timeout: 300000 }, async t => {
 });
 
 test('sweep 7: the state-matrix harness still renders every app in every state', { timeout: 300000 }, async t => {
-  const app = await serve({ port: 8918 });
+  const app = await serve();
   const br = await open({ headless: true, width: 1440, height: 900 });
   const p = await br.page(app.url + '/_states.html');
   t.after(async () => { await br.close(); await app.close(); });
@@ -683,7 +683,7 @@ test('sweep 7: the state-matrix harness still renders every app in every state',
 });
 
 test('sweep 6: keyboard — focus is visible, nothing traps, Escape closes popovers', { timeout: 600000 }, async t => {
-  const app = await serve({ port: 8916 });
+  const app = await serve();
   const br = await open({ headless: true, width: 1440, height: 900 });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });

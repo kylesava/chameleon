@@ -25,7 +25,7 @@ async function signIn(p, username, password, answers) {
 }
 
 test('settings: what the baseline set is visible and changeable afterwards', { timeout: 150000 }, async t => {
-  const app = await serve({ port: 8905 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -76,7 +76,7 @@ test('settings: what the baseline set is visible and changeable afterwards', { t
 });
 
 test('settings: behaviour the system has learned is shown back to the learner', { timeout: 150000 }, async t => {
-  const app = await serve({ port: 8906 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -115,7 +115,7 @@ test('settings: behaviour the system has learned is shown back to the learner', 
 });
 
 test('settings: every knob is here, and switching a window off actually removes it', { timeout: 150000 }, async t => {
-  const app = await serve({ port: 8908 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });

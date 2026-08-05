@@ -10,7 +10,7 @@
      await b.close();
 */
 const { spawn } = require('node:child_process');
-const { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync } = require('node:fs');
+const { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 
@@ -22,6 +22,21 @@ const CHROME = [
 ];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* Chrome writes the port it actually bound to as the first line of
+   DevToolsActivePort, once it is listening. */
+async function readDevToolsPort(dir, tries = 100) {
+  const file = join(dir, 'DevToolsActivePort');
+  for (let i = 0; i < tries; i++) {
+    try {
+      const raw = String(readFileSync(file, 'utf8'));
+      const first = raw.split(String.fromCharCode(10))[0].trim();
+      if (/^[0-9]+$/.test(first)) return Number(first);
+    } catch { /* not written yet */ }
+    await sleep(100);
+  }
+  throw new Error('chrome never reported a debugging port');
+}
 
 async function fetchJson(url, tries = 60) {
   for (let i = 0; i < tries; i++) {
@@ -38,7 +53,11 @@ async function open({ headless = true, width = 1440, height = 900, port = 0 } = 
   const bin = CHROME.find(p => { try { return existsSync(p); } catch { return false; } })
     || CHROME[0];
   const dir = mkdtempSync(join(tmpdir(), 'cham-cdp-'));
-  const p = port || 9300 + Math.floor(process.pid % 500);
+  /* Port 0 lets the OS pick a free one and Chrome writes it to
+     DevToolsActivePort in the profile directory. Deriving it from the pid
+     meant two test files running at once could attach to each other's browser
+     — which looks exactly like a flaky test and is not one. */
+  const p = port || 0;
   const args = [
     `--remote-debugging-port=${p}`,
     `--user-data-dir=${dir}`,
@@ -51,11 +70,12 @@ async function open({ headless = true, width = 1440, height = 900, port = 0 } = 
   if (headless) args.unshift('--headless=new');
   const proc = spawn(bin, args, { stdio: 'ignore' });
 
-  const version = await fetchJson(`http://127.0.0.1:${p}/json/version`);
+  const realPort = p || await readDevToolsPort(dir);
+  const version = await fetchJson(`http://127.0.0.1:${realPort}/json/version`);
   const browser = await connect(version.webSocketDebuggerUrl);
 
   return {
-    proc, port: p,
+    proc, port: realPort,
     async page(url) { return newPage(browser, p, url, { width, height }); },
     async close() {
       try { await browser.send('Browser.close'); } catch { /* already gone */ }
@@ -282,7 +302,11 @@ async function newPage(browser, port, url, size) {
 
 /* Start the app on a scratch port with its own database so tests never touch
    the real one. */
-async function serve({ port = 8899, db } = {}) {
+async function serve({ port = 0, db } = {}) {
+  /* Port 0 by default: the OS picks a free one and the server reports it on
+     stdout. Fixed ports meant a server left behind by a killed run was still
+     listening, the next run attached to it, and the test then ran against
+     someone else's database — which reads as a flaky test and is not one. */
   const dir = mkdtempSync(join(tmpdir(), 'cham-db-'));
   const env = { ...process.env, PORT: String(port), CHAMELEON_DB: db || join(dir, 'test.db'), CHAMELEON_TEST: '1' };
   const proc = spawn(process.execPath, ['server.js'], {
@@ -292,14 +316,34 @@ async function serve({ port = 8899, db } = {}) {
   let log = '';
   proc.stdout.on('data', d => { log += d; });
   proc.stderr.on('data', d => { log += d; });
-  for (let i = 0; i < 80; i++) {
-    try { const r = await fetch(`http://localhost:${port}/api/me`); if (r.status) break; } catch { /* */ }
-    await sleep(150);
+
+  let bound = 0;
+  for (let i = 0; i < 120; i++) {
+    if (proc.exitCode !== null) throw new Error(`server exited (${proc.exitCode}):
+${log}`);
+    const m = log.match(/http:\/\/localhost:(\d+)/);
+    if (m) { bound = Number(m[1]); break; }
+    await sleep(120);
   }
+  if (!bound) throw new Error(`server never reported a port:
+${log}`);
+
+  for (let i = 0; i < 60; i++) {
+    try {
+      const r = await fetch(`http://localhost:${bound}/api/me`, { signal: AbortSignal.timeout(1500) });
+      if (r.status) break;
+    } catch { /* not answering yet */ }
+    await sleep(120);
+  }
+
   return {
-    proc, port, url: `http://localhost:${port}`,
+    proc, port: bound, url: `http://localhost:${bound}`,
     log: () => log,
-    async close() { try { proc.kill(); } catch { /* */ } await sleep(200); try { rmSync(dir, { recursive: true, force: true }); } catch { /* */ } },
+    async close() {
+      try { proc.kill(); } catch { /* already gone */ }
+      await sleep(200);
+      try { rmSync(dir, { recursive: true, force: true }); } catch { /* windows lock */ }
+    },
   };
 }
 

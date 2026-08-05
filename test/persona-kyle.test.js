@@ -272,7 +272,7 @@ const tileText = p => p.eval(`JSON.stringify([...document.querySelectorAll('.til
  * the journey
  * ------------------------------------------------------------------ */
 test('kyle: the impatient power user, end to end', { timeout: 1500000 }, async t => {
-  const app = await serve({ port: PORT });
+  const app = await serve();
   const br = await open({ headless: true, width: 1440, height: 900, port: CDP });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });

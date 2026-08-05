@@ -348,35 +348,76 @@
      error graphic. */
   /* Illustrations are requested one at a time so a lesson with several does
      not fire a burst of expensive calls, and each appears the moment it is
-     ready rather than all at the end. */
+     ready rather than all at the end.
+
+     Keyed by prompt, not by node. A lesson tile repaints whenever narration
+     arrives or the grid resizes, which replaces every node in it — so a request
+     tied to a node was orphaned mid-flight while its replacement started a
+     fresh one, and the spinner span in front of the learner never resolved. The
+     result is deterministic per prompt (the server hashes and caches it), so
+     one request per prompt is asked for once and painted into whichever node is
+     on screen when it lands. */
+  const imgCache = new Map();     // "aspect|prompt" -> Promise<url>
   let imgChain = Promise.resolve();
+
+  const genNodes = prompt => [...document.querySelectorAll('.genimg')]
+    .filter(n => n.getAttribute('data-prompt') === prompt);
+
+  function paintImage(node, url) {
+    if (node.dataset.painted === url) return;
+    node.dataset.painted = url;
+    const img = new Image();
+    img.alt = node.getAttribute('data-alt') || '';
+    img.className = 'genimg-in';
+    img.onload = () => {
+      const wait = node.querySelector('.genimg-wait');
+      if (wait) wait.remove();
+      node.classList.add('ready');
+    };
+    img.onerror = () => { img.remove(); failImage(node); };
+    /* In the document BEFORE the src is set. A detached image never finishes
+       loading if the browser decides to defer it — and waiting for onload
+       before inserting it made that a deadlock, so the placeholder spun
+       forever and no illustration ever appeared. */
+    node.prepend(img);
+    img.src = url;
+  }
+
+  function failImage(node) {
+    node.classList.add('genimg-failed');
+    const w = node.querySelector('.genimg-wait span');
+    if (w) w.textContent = 'illustration unavailable';
+  }
+
   async function mountImages(root) {
     const nodes = [...root.querySelectorAll('.genimg:not([data-done])')];
     for (const n of nodes) {
       n.setAttribute('data-done', '1');
       const prompt = n.getAttribute('data-prompt');
       if (!prompt) continue;
-      imgChain = imgChain.then(async () => {
-        try {
+      const aspect = n.dataset.aspect || '16:9';
+      const key = aspect + '|' + prompt;
+
+      if (!imgCache.has(key)) {
+        const job = imgChain.then(async () => {
           const r = await fetch('api/image', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ prompt, aspect: n.dataset.aspect || '16:9' }),
+            body: JSON.stringify({ prompt, aspect }),
           });
-          const j = await r.json();
+          const j = await r.json().catch(() => ({}));
           if (!r.ok) throw new Error(j.error || 'image failed');
-          if (!n.isConnected) return;
-          const img = new Image();
-          img.alt = n.getAttribute('data-alt') || '';
-          img.loading = 'lazy';
-          img.onload = () => { n.querySelector('.genimg-wait')?.remove(); n.prepend(img); n.classList.add('ready'); };
-          img.src = j.url;
-        } catch (e) {
-          n.classList.add('genimg-failed');
-          const w = n.querySelector('.genimg-wait span');
-          if (w) w.textContent = 'illustration unavailable';
-        }
-      });
+          return j.url;
+        });
+        imgCache.set(key, job);
+        // a failure must not poison the queue, and should be retryable later
+        imgChain = job.catch(() => {});
+        job.catch(() => imgCache.delete(key));
+      }
+
+      imgCache.get(key)
+        .then(url => genNodes(prompt).forEach(x => paintImage(x, url)))
+        .catch(() => genNodes(prompt).forEach(failImage));
     }
     return imgChain;
   }

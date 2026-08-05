@@ -290,7 +290,7 @@ async function transcript(p) {
 }
 
 test('matt: one window, one step, and a plan he can act on', { timeout: 1200000 }, async t => {
-  const app = await serve({ port: PORT });
+  const app = await serve();
   const br = await open({ headless: !process.env.MATT_HEADED });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });

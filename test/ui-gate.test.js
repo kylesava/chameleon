@@ -8,7 +8,7 @@ const { open, serve, sleep } = require('./drive.js');
 const SHOTS = require('node:path').join(__dirname, '..', 'data', 'shots');
 
 test('gate: sign in, answer the baseline, land in the workspace', { timeout: 180000 }, async t => {
-  const app = await serve({ port: 8901 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
@@ -87,7 +87,7 @@ test('gate: sign in, answer the baseline, land in the workspace', { timeout: 180
 });
 
 test('gate: Kyle gets the opposite profile, and users cannot see each other', { timeout: 180000 }, async t => {
-  const app = await serve({ port: 8902 });
+  const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });

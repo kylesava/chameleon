@@ -1162,6 +1162,10 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 /* generated illustration */
 .genimg { margin: 12px 0; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); }
 .genimg img { display: block; width: 100%; height: auto; animation: imgIn 620ms var(--ease-out); }
+/* the image is in the DOM from the moment it starts loading, so it must stay
+   invisible until it actually has pixels — otherwise the placeholder jumps */
+.genimg img.genimg-in { display: none; }
+.genimg.ready img.genimg-in { display: block; }
 @keyframes imgIn { from { opacity: 0; transform: scale(1.03); filter: blur(6px); } }
 .genimg figcaption { padding: 7px 11px; font-size: 10.5px; color: var(--text-faint); border-top: 1px solid var(--line); }
 .genimg-wait {
