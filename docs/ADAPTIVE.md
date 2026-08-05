@@ -278,3 +278,39 @@ recorded here so they are not silently forgotten:
   people who have never used ChatGPT. That is the argument behind `simple`
   being a real mode rather than a courtesy, and behind familiarity beating
   novelty in the first release. It has not been settled.
+
+
+## Update — answer or plan
+
+> "The agent should behave a bit more like a normal AI system does, in that I
+> just send a prompt like 'write me an email' or I paste some content and say
+> 'summarise this for me' and the agent will be able to just one-shot the
+> answer. The point being it doesn't need to make a plan for every question I
+> ask… there should be some kind of very quick decision upfront as to whether
+> or not we need to apply a plan to a request versus just respond to the
+> question. Then this would be something I would genuinely use for everything."
+
+The system prompt now opens with that decision, before anything else:
+
+- **Answer** — most requests. Write it properly, in chat, and stop. No plan, no
+  checklist, no windows unless the answer is something they will keep.
+- **Plan** — work with several sittings in it. The test: can you name three
+  steps that each end in something they could show you? If not, it is an
+  answer.
+- **When in doubt, answer.** A plan nobody asked for is the most irritating
+  thing you can do to a small request. Offering one afterwards in a line costs
+  nothing.
+
+Two existing principles had to be qualified rather than kept absolute: "the app
+window is your voice, not the chat" and "your chat reply is the least important
+thing you write" are true *while teaching* and exactly wrong when answering,
+where the reply IS the deliverable.
+
+Measured live, 5/5 in `simple` and 5/5 in `extreme`: three small asks answered
+in chat with no plan and no windows, two pieces of work planned. Pinned in
+`test/persona-triage.test.js` (behind `PERSONA=1`).
+
+The entry point moved with it — "What do you want to do today?" rather than
+"What do you want to learn?", with suggestions that are deliberately half
+one-shot asks and half pieces of work. Learning is the first use case, not the
+boundary of the product.

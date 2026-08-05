@@ -7,9 +7,11 @@
 
 ---
 
-Tell Chameleon what you want to learn. It builds a **lesson plan** — a visible
-checklist of goals you work through and check off — then teaches it: writing
-lessons, quizzing you, building flashcard decks, and recording a two-host audio
+Tell Chameleon what you want to do. Ask something small — draft this, summarise
+that, what's the difference between X and Y — and you get an answer, the way you
+would from any assistant. Give it something bigger and it builds a **plan**, a
+visible spine of steps you work through together, then teaches it: writing
+lessons, quizzing you, building flashcard decks, recording a two-host audio
 overview, opening and rearranging those tools on an adaptive grid as you go.
 Every result feeds back into the plan, so the experience changes as you learn.
 

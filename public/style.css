@@ -645,7 +645,17 @@ body.tiledrag .tile:not(.drag) { pointer-events: none; }
   transition: bottom 500ms var(--ease-spring), top 500ms var(--ease-spring),
     left 500ms var(--ease-spring), right 500ms var(--ease-spring), width 500ms var(--ease-spring);
 }
-body.chat-center #chatdock { top: 14%; bottom: auto; }
+/* The empty state belongs to the whole screen, not to a docked column. There
+   is no workspace to sit beside yet, so the invitation is centred whatever
+   placement they normally use; it takes its dock as soon as there is something
+   to sit beside. */
+body.chat-center #chatdock {
+  top: 14% !important; bottom: auto !important;
+  left: calc(50% - var(--dock-w) / 2) !important;
+  right: auto !important;
+  width: var(--dock-w) !important;
+  justify-content: flex-start !important;
+}
 
 /* lifted: the panel tracks the cursor, so a drag feels like carrying it */
 body.chat-lifted #chatdock {

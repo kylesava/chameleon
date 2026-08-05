@@ -1178,11 +1178,14 @@
   };
 
   /* ---------------- suggestions (hero) ---------------- */
+  /* Two of these are one-shot asks and two are pieces of work. The mix is the
+     point: the entry screen must not imply that everything here becomes a
+     course. */
   const SUGGESTIONS = [
-    { t: 'Teach me how neural networks actually work', i: 'lesson' },
-    { t: 'Help me prep for my exam — I\'ll paste my notes', i: 'sources' },
-    { t: 'I want to get good at personal finance', i: 'plan' },
-    { t: 'Quiz me on something I should know', i: 'quiz' },
+    { t: 'Summarise this for me — I\'ll paste it', i: 'sources' },
+    { t: 'Draft a reply declining a meeting', i: 'lesson' },
+    { t: 'Teach me how neural networks actually work', i: 'plan' },
+    { t: 'I want to get good at personal finance', i: 'quiz' },
   ];
   const sugEl = document.getElementById('suggestions');
   SUGGESTIONS.forEach(s => {
