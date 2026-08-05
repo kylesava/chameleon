@@ -29,54 +29,37 @@ test('gate: sign in, answer the baseline, land in the workspace', { timeout: 180
   assert.equal(await p.eval('document.querySelector("#gate-form button").disabled', false), false,
     'the button must re-enable so a mistyped password is recoverable');
 
-  /* ---- the real password gets through to the baseline ---- */
+  /* ---- the real password gets through to the one question ---- */
   await p.fill('#gate-pass', 'OldGuy');
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-progress")', 12000, 'baseline questionnaire');
-  assert.equal(await p.count('.gate-progress i'), 5, 'five baseline questions');
-  await p.shot(SHOTS + '/gate-q1.png');
+  await p.waitFor('document.querySelector(".gate-options")', 12000, 'the one question');
 
-  /* Every question is a situation with a concrete example, not a setting —
-     nothing here asks the learner to describe themselves in the abstract. */
-  assert.match(await p.text('#gate-body h1'), /lesson and a quiz/i,
-    'the question should describe something that happens, not name a preference');
-  assert.match(await p.text('.gate-sub'), /\?$/, 'and then ask one plain question');
-
-  /* Matt's answers: one thing at a time, check in every step, plan in chat. */
-  await p.click('.gate-opt[data-v="one"]');
-  await p.waitFor('document.querySelector(".gate-progress i:nth-child(2).on")', 6000, 'question 2');
-  await p.click('.gate-opt[data-v="every-step"]');
-  await p.waitFor('document.querySelector(".gate-progress i:nth-child(3).on")', 6000, 'question 3');
-  await p.click('.gate-opt[data-v="chat"]');
-  await p.waitFor('document.querySelector(".gate-progress i:nth-child(4).on")', 6000, 'question 4');
-
-  /* Back must restore the previous answer rather than losing it. */
-  await p.click('.gate-back');
-  await p.waitFor('document.querySelector(".gate-progress i:nth-child(3).on")', 6000, 'back to question 3');
-  assert.ok(await p.has('.gate-opt[data-v="chat"].on'), 'going back must show what was already chosen');
-  await p.click('.gate-next');
-  await p.waitFor('document.querySelector(".gate-progress i:nth-child(4).on")', 6000, 'forward again');
-  await p.click('.gate-opt[data-v="windows"]');
-  await p.waitFor('document.querySelector(".gate-progress i:nth-child(5).on")', 6000, 'question 5');
-  await p.click('.gate-opt[data-v="diagrams"]');
-
+  /* One question, not five. Everything else is learned from use or said in
+     the chat — asking it up front is friction in front of someone who just
+     wants to start. */
+  assert.equal(await p.count('.gate-opt'), 3, 'three modes, one screen');
+  assert.equal(await p.has('.gate-progress'), false, 'no multi-step questionnaire');
+  assert.match(await p.text('#gate-body h1'), /how much at once/i);
   /* nothing asks how much they already know — that is per-topic, not per-person */
   assert.equal(await p.has('.gate-opt[data-v="novice"]'), false);
+  await p.shot(SHOTS + '/gate-q1.png');
+
+  await p.click('.gate-opt[data-v="simple"]');
 
   /* ---- the gate gets out of the way ---- */
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
   await p.waitFor('getComputedStyle(document.getElementById("shell")).opacity === "1"', 8000, 'workspace visible');
-  await p.waitFor('document.getElementById("hero")', 8000, 'hero');
   await p.shot(SHOTS + '/gate-done.png');
 
-  /* ---- the answers actually became a profile ---- */
+  /* ---- one answer set every parameter ---- */
   const me = await p.eval('fetch("api/me").then(r => r.json())');
   assert.equal(me.user.username, 'matt');
   assert.equal(me.profile.onboarded, true);
-  assert.equal(me.profile.effective.maxApps, 1, 'one-thing-at-a-time means a budget of one window');
+  assert.equal(me.profile.effective.mode, 'simple');
+  assert.equal(me.profile.effective.maxApps, 1, 'one thing at a time means one window');
   assert.equal(me.profile.effective.checkinEvery, 'step');
-  assert.equal(me.profile.effective.planPlace, 'chat', 'Matt keeps the plan in the conversation');
-  assert.equal(me.profile.effective.voice, 'windows');
+  assert.equal(me.profile.effective.planPlace, 'chat', 'and the plan in the conversation');
+  assert.equal(me.profile.effective.voice, 'chat', 'and the agent talking in the chat, not inside apps');
 
   /* ---- reload must not ask again ---- */
   await p.goto(app.url + '/');
@@ -96,19 +79,16 @@ test('gate: Kyle gets the opposite profile, and users cannot see each other', { 
   await p.fill('#gate-user', 'kyle');
   await p.fill('#gate-pass', 'YoungGuy');
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-progress")', 12000, 'baseline');
-
-  for (const a of ['all', 'rarely', 'window', 'chat', 'rich']) {
-    await p.click(`.gate-opt[data-v="${a}"]`);
-    await sleep(360);
-  }
+  await p.waitFor('document.querySelector(".gate-options")', 12000, 'the one question');
+  await p.click('.gate-opt[data-v="extreme"]');
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
 
+  /* the same single choice, pointed the other way, gives the opposite product */
   const me = await p.eval('fetch("api/me").then(r => r.json())');
+  assert.equal(me.profile.effective.mode, 'extreme');
   assert.equal(me.profile.effective.maxApps, 4, 'roaming means several windows at once');
   assert.equal(me.profile.effective.checkinEvery, 'never');
   assert.equal(me.profile.effective.planPlace, 'window', 'Kyle keeps the plan beside the work');
-  assert.equal(me.profile.effective.voice, 'chat');
   assert.equal(me.profile.effective.visuals, 'rich');
 
   /* Kyle starts a journey; Matt must never see it. */

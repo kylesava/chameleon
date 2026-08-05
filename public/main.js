@@ -237,6 +237,14 @@
 
   const APP_TOGGLES = ['lesson', 'quiz', 'flashcards', 'podcast', 'deck'];
 
+  /* The one control everything hangs off. The rest still exists — it is just
+     not the first thing a new person is asked to reason about. */
+  const MODE_CARDS = [
+    { v: 'simple', label: 'One thing at a time', sub: 'A lesson, then a quiz. Asks before moving on.' },
+    { v: 'balanced', label: 'A steady pace', sub: 'Usually one thing, sometimes two. Checks in at breaks.' },
+    { v: 'extreme', label: 'Everything at once', sub: 'Side by side, moving without asking.' },
+  ];
+
   function renderUserPop() {
     const eff = state.profile || {};
     const learned = [];
@@ -249,16 +257,30 @@
     if (eff.confidence >= 0.99) learned.push('now following what you do over what you ticked');
 
     const apps = stated.apps || {};
+    const mode = (state.profile || {}).mode || 'custom';
     /* Every change repaints the whole sheet, so without this, adjusting a
        setting near the bottom throws you back to the top of the list. */
     const keepScroll = (userPop.querySelector('.up-scroll') || {}).scrollTop || 0;
+    const advOpen = userPop.dataset.adv === '1';
+
     userPop.innerHTML = `
       <div class="up-head">
         <b>${Apps.esc((state.user && state.user.display_name) || 'You')}</b>
         <span>how you like to work</span>
       </div>
       <div class="up-body"><div class="up-scroll">
-      ${SETTINGS.map(sec => {
+        <div class="up-modes">
+          ${MODE_CARDS.map(m => `<button class="up-mode ${mode === m.v ? 'on' : ''}" data-mode="${m.v}">
+            <b>${m.label}</b><span>${m.sub}</span></button>`).join('')}
+        </div>
+        ${mode === 'custom' ? '<span class="up-note">Tuned by hand. Pick one above to go back to a preset.</span>' : ''}
+
+        <button class="up-adv" aria-expanded="${advOpen}">
+          <span>Advanced</span>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6.5L8 10l4-3.5"/></svg>
+        </button>
+        <div class="up-advbody" ${advOpen ? '' : 'hidden'}>
+        ${SETTINGS.map(sec => {
     if (sec.apps) {
       return `<div class="up-group">${sec.group}</div>
           <div class="up-apps">${APP_TOGGLES.map(a => {
@@ -276,10 +298,11 @@
           ${sec.note ? `<span class="up-note">${sec.note}</span>` : ''}
         </div>`;
   }).join('')}
+        </div>
       ${learned.length ? `<div class="up-learned"><em>learned so far</em><span>${Apps.esc(learned.join(' · '))}</span></div>` : ''}
       </div></div>
       <div class="up-foot">
-        <button class="up-retake">Retake the baseline</button>
+        <button class="up-retake">Start over</button>
         <button class="up-out">Sign out</button>
       </div>`;
 
@@ -305,6 +328,22 @@
           paintPlan();
         }
       } catch { /* the next open re-reads the truth from the server */ }
+    };
+
+    userPop.querySelectorAll('.up-mode').forEach(b => b.onclick = async () => {
+      const m = b.dataset.mode;
+      userPop.querySelectorAll('.up-mode').forEach(x => x.classList.toggle('on', x === b));
+      try {
+        const r = await api('api/profile', { mode: m });
+        if (r.profile) { stated = r.profile.stated; state.profile = r.profile.effective; }
+      } catch { /* the next open re-reads the truth from the server */ }
+      renderUserPop();
+      paintPlan();
+      relayout();
+    });
+    userPop.querySelector('.up-adv').onclick = () => {
+      userPop.dataset.adv = advOpen ? '0' : '1';
+      renderUserPop();
     };
 
     userPop.querySelectorAll('.up-opts button').forEach(b => b.onclick = () => {

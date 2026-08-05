@@ -17,13 +17,13 @@ const PLAN = {
   ],
 };
 
-async function asMatt(p, url, answers) {
+async function asMatt(p, url, mode) {
   await p.waitFor('document.querySelector("#gate-form")', 15000, 'login');
   await p.fill('#gate-user', 'matt');
   await p.fill('#gate-pass', 'OldGuy');
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-progress")', 15000, 'baseline');
-  for (const a of answers) { await p.click(`.gate-opt[data-v="${a}"]`); await sleep(340); }
+  await p.waitFor('document.querySelector(".gate-options")', 15000, 'the one question');
+  await p.click(`.gate-opt[data-v="${mode}"]`);
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 12000, 'boot');
   const sid = await p.eval('window.__cham.sessionId()');
@@ -39,7 +39,7 @@ test('chat spine: the plan is in the conversation and there is no plan window', 
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  const sid = await asMatt(p, app.url, ['one', 'every-step', 'chat', 'windows', 'diagrams']);
+  const sid = await asMatt(p, app.url, 'simple');
   await p.waitFor('document.querySelector(".cp-now")', 15000, 'the spine in the chat');
 
   /* the setting Matt actually asked for */
@@ -100,7 +100,7 @@ test('chat spine: Ready advances, I am stuck does not', { timeout: 180000 }, asy
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  await asMatt(p, app.url, ['one', 'every-step', 'chat', 'windows', 'diagrams']);
+  await asMatt(p, app.url, 'simple');
   await p.waitFor('document.querySelector(".cp-go")', 15000, 'the ready button');
 
   await p.click('.cp-go');
@@ -132,21 +132,26 @@ test('chat spine: switching where the plan lives moves it, both ways', { timeout
   t.after(async () => { await br.close(); await app.close(); });
 
   /* start in a window, like Kyle */
-  await asMatt(p, app.url, ['all', 'rarely', 'window', 'chat', 'rich']);
+  await asMatt(p, app.url, 'extreme');
   await p.waitFor('document.querySelector(".plan-now")', 15000, 'the plan window');
   assert.ok((await p.eval('window.__cham.open()')).includes('plan'));
   assert.equal(await p.has('.cp-now'), false, 'not in the chat as well — one home, not two');
 
-  /* move it to the conversation from the settings sheet */
+  /* the primary path: one mode card moves everything, including the plan */
   await p.click('#user-btn');
   await p.waitFor('document.querySelector("body.settings-open")', 8000, 'settings');
-  await p.click('.up-row[data-k="planPlace"] button[data-v="chat"]');
+  assert.equal(await p.count('.up-mode'), 3, 'three modes, and nothing else up front');
+  assert.equal(await p.eval('document.querySelector(".up-advbody").hidden', false), true,
+    'the individual settings start folded away');
+  await p.click('.up-mode[data-mode="simple"]');
   await p.waitFor('document.querySelector(".cp-now")', 10000, 'the spine to move into the chat');
   assert.ok(!(await p.eval('window.__cham.open()')).includes('plan'), 'the window should have closed itself');
   // the tile animates out, so give it its exit before declaring it gone
   await p.waitFor('!document.querySelector(".plan-now")', 6000, 'the plan window to leave');
 
-  /* and back again */
+  /* and back again, this time through Advanced — the detail is still reachable */
+  await p.click('.up-adv');
+  await p.waitFor('!document.querySelector(".up-advbody").hidden', 6000, 'advanced to open');
   await p.click('.up-row[data-k="planPlace"] button[data-v="window"]');
   await p.waitFor('document.querySelector(".plan-now")', 10000, 'the spine to move back to a window');
   assert.equal(await p.eval('getComputedStyle(document.getElementById("chat-plan")).display', false), 'none');

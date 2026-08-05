@@ -224,3 +224,57 @@ meaningless — the same person is deep in one area and blank in the next, and a
 system that pins them to "expert" then skips fundamentals in a new field is
 worse than one that never asked. It survives as a default in the sheet, and the
 brief now says plainly to override it from evidence.
+
+
+## Update — one control, and the agent as a layer
+
+Two rounds of Matt using it produced the same note twice, so it is worth
+stating as a principle: **tracking everything and exposing everything are
+different decisions, and we had been treating them as one.**
+
+> "I love the fact that we've got those [settings]. I don't love the fact that
+> we expose them to users… I felt like there should be just a slider — how
+> crazy do you want to go. And all of the parameters hang off just one."
+
+So `MODES` in `server/profile.js` is a named bundle of every tuned parameter,
+and `modeOf()` derives which one a profile currently matches (or `custom`).
+The settings sheet leads with three cards; the parameters are behind
+**Advanced**. The observed layer, the signals and the coaching are all
+unchanged — they were never the problem.
+
+Onboarding collapsed from five questions to one for the same reason. The other
+four were asking a stranger to predict preferences they have no basis to
+predict yet, when the system can watch instead.
+
+### The agent is not an app
+
+Matt, on why the workspace confused him:
+
+> "I get confused when the agent is part of the apps. I don't get confused if
+> the agent says, let me change that podcast for you, and goes and edits one of
+> the apps… I think I have a problem when the agent is part of the app."
+
+The fix is visual, not architectural. Docked to a side the chat surface drops
+its card, border and shadow and becomes a layer — the conversation occupies its
+column, only the composer is drawn, and the apps are the only things in boxes.
+Agent replies lost their chat bubbles for the same reason: a bubble is a *thing
+on the page*, competing with the things on the page. The learner's own messages
+kept theirs, because their turn genuinely is a discrete event.
+
+Left is the default because Matt asked for "a familiar place where I know where
+to go for the agent". The centre dock still exists and still floats; it is now
+a choice rather than the default.
+
+### Not built, deliberately
+
+Two threads from the same conversations are strategy rather than code, and are
+recorded here so they are not silently forgotten:
+
+- **Verticalised packaging.** Selling the same general platform with
+  pre-packaged use-case bundles per industry, rather than verticalised
+  products. Nothing in the architecture prevents it — the education tuning
+  lives in the prompt and the app registry, which is where a pack would go.
+- **Who this is for.** Matt's read is SMB / mid-market, non-technical, possibly
+  people who have never used ChatGPT. That is the argument behind `simple`
+  being a real mode rather than a courtesy, and behind familiarity beating
+  novelty in the first release. It has not been settled.

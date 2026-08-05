@@ -204,10 +204,14 @@ function makeApi(store) {
     if (req.method === 'POST' && pathname === '/api/profile') {
       const b = await readJson(req);
       const current = store.getProfile(userId);
+      /* A mode is a bundle: setting one writes every parameter it covers, so
+         the exposed control and the hidden ones can never disagree. */
+      const fromMode = b.mode && profileModel.MODES[b.mode] ? { ...profileModel.MODES[b.mode] } : {};
+      delete fromMode.label;
       const saved = store.saveProfile(userId, {
         ...current,
         onboarded: b.onboarded !== undefined ? !!b.onboarded : current.onboarded,
-        stated: { ...current.stated, ...(b.stated || {}) },
+        stated: { ...current.stated, ...fromMode, ...(b.stated || {}) },
       });
       audit.log('profile_set', { user: userId, stated: JSON.stringify(saved.stated) });
       return json(res, 200, { profile: shapeProfile(saved) });

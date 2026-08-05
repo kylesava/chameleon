@@ -52,7 +52,9 @@ Exactly one step is live at a time; set it with status "doing". Use set_task_sta
   },
   {
     name: 'remember_preference',
-    description: `Record a lasting preference the learner has just expressed about HOW they want to work. Use this the moment they say something durable — "stop opening two things at once", "put the plan in the chat", "don't ask me every step", "I never want podcasts", "less detail", "talk to me in chat rather than in the windows". Do NOT use it for one-off requests about the current topic ("skip this bit", "go back") — only for how the product should behave from now on.
+    description: `Record a lasting preference the learner has just expressed about HOW they want to work.
+
+REACH FOR \`mode\` FIRST. Anything broad about pace — "slow down", "too much at once", "give me everything", "take it easy" — is mode=simple|balanced|extreme, which moves every setting together in one call. Use a specific setting only when they named that specific thing. Use this the moment they say something durable — "stop opening two things at once", "put the plan in the chat", "don't ask me every step", "I never want podcasts", "less detail", "talk to me in chat rather than in the windows". Do NOT use it for one-off requests about the current topic ("skip this bit", "go back") — only for how the product should behave from now on.
 
 It takes effect immediately and permanently, is reflected in their settings, and you should acknowledge it in one short line. If they say something that maps to no setting here, do not force it — just do as they asked for now.`,
     input_schema: {
@@ -61,8 +63,8 @@ It takes effect immediately and permanently, is reflected in their settings, and
       properties: {
         setting: {
           type: 'string',
-          enum: ['parallelism', 'checkins', 'planPlace', 'voice', 'chatter', 'depth', 'visuals', 'priorKnowledge', 'apps'],
-          description: 'Which preference. parallelism=how many windows at once; checkins=whether to wait for them; planPlace=where the plan lives; voice=where you speak; chatter=how much you say in chat; depth=how much detail; visuals=diagram density; apps=turn a window on or off',
+          enum: ['mode', 'parallelism', 'checkins', 'planPlace', 'voice', 'chatter', 'depth', 'visuals', 'priorKnowledge', 'apps'],
+          description: 'Which preference. mode=the overall pace, and the one to reach for when they say something broad like "slow down" or "give me everything"; parallelism=how many windows at once; checkins=whether to wait for them; planPlace=where the plan lives; voice=where you speak; chatter=how much you say in chat; depth=how much detail; visuals=diagram density; apps=turn a window on or off',
         },
         value: {
           type: 'string',
@@ -496,6 +498,7 @@ function makeExecutors(ctx) {
       if (!ctx.setPreference) return 'Preferences cannot be saved in this session.';
       const setting = String(input.setting || '');
       const raw = String(input.value || '').trim();
+      const profileModel = require('./profile.js');
       const ALLOWED = {
         parallelism: v => (/^[1-4]$/.test(v) ? Number(v) : null),
         checkins: v => (['every-step', 'every-stage', 'rarely'].includes(v) ? v : null),
@@ -507,7 +510,12 @@ function makeExecutors(ctx) {
         priorKnowledge: v => (['novice', 'some', 'strong'].includes(v) ? v : null),
       };
       let patch = null;
-      if (setting === 'apps') {
+      if (setting === 'mode') {
+        const preset = profileModel.MODES[raw];
+        if (!preset) return 'Not saved: mode takes simple, balanced or extreme.';
+        patch = { ...preset };
+        delete patch.label;
+      } else if (setting === 'apps') {
         const m = raw.match(/^(lesson|quiz|flashcards|podcast|deck)\s*[:=]\s*(on|off|true|false)$/i);
         if (!m) return 'Not saved: apps takes "lesson:off" or "podcast:on".';
         patch = { apps: { [m[1].toLowerCase()]: /^(on|true)$/i.test(m[2]) } };

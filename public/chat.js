@@ -28,7 +28,11 @@
   // ?place=left|right|center|mini overrides the stored preference (handy for
   // demo links and screenshots); it does not overwrite what you last chose.
   const urlPlace = new URLSearchParams(location.search).get('place');
-  let place = urlPlace || localStorage.getItem('cham_place') || 'center';
+  /* Left by default. Matt: "always on the left might be better — so there's a
+     familiar place where I know where to go for the agent." The centre dock
+     floats over the canvas, which is what made the agent feel like one more
+     window among the apps. */
+  let place = urlPlace || localStorage.getItem('cham_place') || 'left';
   let collapsed = localStorage.getItem('cham_collapsed') === '1';
   /* A transient tuck, distinct from the stored preference: once there is a
      workspace to look at, the centred history stops blanketing it. The teaching

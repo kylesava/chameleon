@@ -10,20 +10,13 @@ const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 
 /* Sign in and drop a three-step plan straight into the database via the same
    tool the agent would use, then reload so the UI renders it cold. */
-async function seeded(p, url, username, password, answers) {
+async function seeded(p, url, username, password, mode) {
   await p.waitFor('document.querySelector("#gate-form")', 12000, 'login form');
   await p.fill('#gate-user', username);
   await p.fill('#gate-pass', password);
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-progress")', 12000, 'baseline');
-  for (const a of answers) {
-    const at = () => p.eval('[...document.querySelectorAll(".gate-progress i")].findIndex(i => i.classList.contains("on"))', false);
-    const was = await at();
-    await p.click(`.gate-opt[data-v="${a}"]`);
-    await sleep(300);
-    // multi-select answers toggle rather than advance, so nudge those along
-    if (await at() === was) { await p.click('.gate-next'); await sleep(300); }
-  }
+  await p.waitFor('document.querySelector(".gate-options")', 12000, 'the one question');
+  await p.click(`.gate-opt[data-v="${mode}"]`);
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 10000, 'session');
   return p.eval('window.__cham.sessionId()');
@@ -44,7 +37,7 @@ test('plan: the current step is unambiguous and every control works', { timeout:
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  const sid = await seeded(p, app.url, 'matt', 'OldGuy', ['one', 'every-step', 'window', 'windows', 'diagrams']);
+  const sid = await seeded(p, app.url, 'matt', 'OldGuy', 'extreme');
   await p.eval(`fetch('api/test/plan', { method:'POST', headers:{'content-type':'application/json'},
     body: JSON.stringify({ session_id: ${sid}, ...${JSON.stringify(PLAN)} }) }).then(r => r.json())`);
   await p.goto(app.url + `/?session=${sid}`);
@@ -111,7 +104,7 @@ test('plan: an empty plan and a finished plan both read sensibly', { timeout: 12
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  const sid = await seeded(p, app.url, 'kyle', 'YoungGuy', ['all', 'rarely', 'window', 'chat', 'rich']);
+  const sid = await seeded(p, app.url, 'kyle', 'YoungGuy', 'extreme');
 
   /* one step, complete it, and the card must not claim there is a next one */
   await p.eval(`fetch('api/test/plan', { method:'POST', headers:{'content-type':'application/json'},
@@ -137,7 +130,7 @@ test('plan: the ready button comes back to life when the agent stops working', {
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  const sid = await seeded(p, app.url, 'matt', 'OldGuy', ['one', 'every-step', 'window', 'windows', 'diagrams']);
+  const sid = await seeded(p, app.url, 'matt', 'OldGuy', 'extreme');
   await p.eval(`fetch('api/test/plan', { method:'POST', headers:{'content-type':'application/json'},
     body: JSON.stringify({ session_id: ${sid}, ...${JSON.stringify(PLAN)} }) }).then(r => r.json())`);
   await p.goto(app.url + `/?session=${sid}`);

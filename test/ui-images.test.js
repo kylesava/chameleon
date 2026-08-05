@@ -15,8 +15,8 @@ async function signIn(p) {
   await p.fill('#gate-user', 'kyle');
   await p.fill('#gate-pass', 'YoungGuy');
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-progress")', 15000, 'baseline');
-  for (const a of ['all', 'rarely', 'window', 'chat', 'rich']) { await p.click(`.gate-opt[data-v="${a}"]`); await sleep(330); }
+  await p.waitFor('document.querySelector(".gate-options")', 15000, 'the one question');
+  await p.click('.gate-opt[data-v="extreme"]');
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 12000, 'boot');
 }

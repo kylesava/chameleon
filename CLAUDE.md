@@ -57,7 +57,7 @@ against them; when a feature conflicts with a commandment, the commandment wins.
 | 2 | `playQueue()` in `public/main.js` — every server event enters one queue and plays with ~700ms spacing, one focus at a time. The server also drops no-op re-opens (`applyLayoutActions`). |
 | 3 | The `narrate` tool (`server/tools.js`) → `narrateInTile()` overlay + mirrored into `message` rows with `kind='narration'`. |
 | 4 | `body.busy` turns the send button into the stop button (`style.css`); `Chat.stop()` aborts the fetch and fast-forwards the queue. |
-| 5 | `#chatdock.fused` is one card holding history + composer; `body.acting` collapses the history away while the queue plays, and `#chat-collapse` hides it on demand. Placement (`place-center/left/right/mini`) moves the whole fused surface — drag the grip, or `?place=` for demo links. |
+| 5 | **The agent is a layer, not a window.** Docked left by default; on a side dock the card, border and shadow are dropped entirely (`body.place-left #chatdock.fused`) so the conversation simply occupies its column. Agent replies are plain text — only the *learner's* messages keep a bubble, because their turn is an event and the agent's is running commentary. Apps are the things in boxes; the agent is not an app. `#chatdock.fused` is one card holding history + composer; `body.acting` collapses the history away while the queue plays, and `#chat-collapse` hides it on demand. Placement (`place-center/left/right/mini`) moves the whole fused surface — drag the grip, or `?place=` for demo links. |
 | 6 | `plan` + `plan_task` tables (stages = parallel/sequential; `done_when` + `apps` per step), the `update_plan` / `complete_step` / `set_task_status` tools, and the `plan` app. The tile leads with a **current-step card** (`.plan-now`): what you are doing, what finished looks like, and "I'm ready" / "I'm stuck". Whether the agent waits on that button is the learner's `checkinEvery` setting, not a global rule. |
 | 7 | `server/agent.js` emits `tool_start` the instant a tool call begins and `draft` events parsed from the still-streaming tool input (`draftScan`). The client opens the target tile immediately with an ephemeral status and renders items as they arrive — see `state.draft` in `public/main.js`. |
 
@@ -72,13 +72,20 @@ the short version:
 - **Sign-in is real.** `server/auth.js` (scrypt + HMAC-signed cookie), two
   seeded accounts, and every journey, profile and signal is scoped to a user.
   `mine(sid)` in `server/api.js` guards every route that takes a journey id.
-- **A five-question baseline** (`public/gate.js`) runs once, before the
-  workspace ever appears. Every question is a **concrete situation** with a real
-  example ("Chameleon has written a lesson and a quiz — what should it put on
-  screen?"), never an abstract setting. It deliberately does **not** ask how
-  much someone already knows: nobody is uniformly a beginner or an expert, so
-  `priorKnowledge` is a starting default the agent overrides per topic, not a
-  fact about the person.
+- **One question, once** (`public/gate.js`): *how much at once?* — one thing at
+  a time / a steady pace / everything at once. That is the whole of onboarding.
+  Everything else is learned from use or said in the chat, because a
+  questionnaire in front of someone who wants to start is friction, and the
+  answers were guesses anyway. It deliberately never asks how much someone
+  already knows: nobody is uniformly a beginner or an expert, so
+  `priorKnowledge` is a default the agent overrides per topic.
+- **ONE control, and everything hangs off it.** A mode (`simple` / `balanced` /
+  `extreme`, see `MODES` in `server/profile.js`) is a named bundle of every
+  other setting. The individual parameters still exist, are still tracked, and
+  are still changeable behind **Advanced** in the settings sheet — touching one
+  just means `modeOf()` reports `custom`. Matt: *"I love that we've got those.
+  I don't love that we expose them to users."* The tracking is the product; the
+  exposure was the mistake.
 - **The plan has two homes, and which one is a setting** (`planPlace`). In the
   conversation (`#chat-plan`, `Apps.chatPlan`) it is something you talk to —
   the current step sits above the composer, the steps are clickable triggers,

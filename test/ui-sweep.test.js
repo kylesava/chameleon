@@ -59,23 +59,15 @@ const dump = (label, rows) => {
    These answers deliberately keep the plan in a WINDOW — this sweep is about
    the tiled workspace, and the plan-in-the-conversation variant has its own
    suite in ui-chatplan.test.js. */
-async function signIn(p, user = 'kyle', pass = 'YoungGuy',
-  answers = ['all', 'rarely', 'window', 'chat', 'rich']) {
+async function signIn(p, user = 'kyle', pass = 'YoungGuy', mode = 'extreme') {
   await p.waitFor('document.querySelector("#gate-form")', 15000, 'login form');
   await p.fill('#gate-user', user);
   await p.fill('#gate-pass', pass);
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-progress") || !document.getElementById("gate")',
+  await p.waitFor('document.querySelector(".gate-options") || !document.getElementById("gate")',
     15000, 'baseline or workspace');
-  if (await p.has('.gate-progress')) {
-    for (const a of answers) {
-      const at = () => p.eval('[...document.querySelectorAll(".gate-progress i")].findIndex(i => i.classList.contains("on"))', false);
-      const was = await at();
-      await p.click(`.gate-opt[data-v="${a}"]`);
-      await sleep(300);
-      if (await at() === was) { await p.click('.gate-next'); await sleep(300); }
-    }
-  }
+  // only the first browser sees the question — the profile lives server-side
+  if (await p.has('.gate-options')) await p.click(`.gate-opt[data-v="${mode}"]`);
   await p.waitFor('!document.getElementById("gate")', 20000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 15000, 'session');
   return p.eval('window.__cham.sessionId()');

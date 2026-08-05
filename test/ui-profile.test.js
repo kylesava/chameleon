@@ -7,19 +7,14 @@ const { open, serve, sleep } = require('./drive.js');
 
 const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 
-async function signIn(p, username, password, answers) {
+async function signIn(p, username, password, mode) {
   await p.waitFor('document.querySelector("#gate-form")', 12000, 'login form');
   await p.fill('#gate-user', username);
   await p.fill('#gate-pass', password);
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-progress")', 12000, 'baseline');
+  await p.waitFor('document.querySelector(".gate-options")', 12000, 'the one question');
   const at = () => p.eval('[...document.querySelectorAll(".gate-progress i")].findIndex(i => i.classList.contains("on"))', false);
-  for (const a of answers) {
-    const was = await at();
-    await p.click(`.gate-opt[data-v="${a}"]`);
-    await sleep(300);
-    if (await at() === was) { await p.click('.gate-next'); await sleep(300); }
-  }
+  await p.click(`.gate-opt[data-v="${mode}"]`);
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 10000, 'session');
 }
@@ -30,19 +25,25 @@ test('settings: what the baseline set is visible and changeable afterwards', { t
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  await signIn(p, 'matt', 'OldGuy', ['one', 'every-step', 'window', 'windows', 'plain']);
+  await signIn(p, 'matt', 'OldGuy', 'simple');
 
-  /* the panel opens and shows what the baseline concluded */
+  /* One control up front, everything else folded away. Matt: "I love that
+     we've got those [settings]. I don't love that we expose them to users." */
   await p.click('#user-btn');
   await p.waitFor('document.querySelector("body.settings-open")', 6000, 'settings panel');
   assert.match(await p.text('.up-head b'), /Matt/);
-  assert.ok(await p.has('.up-row[data-k="parallelism"] button[data-v="1"].on'),
-    'the panel must show the one-window setting the baseline derived');
-  assert.ok(await p.has('.up-row[data-k="checkins"] button[data-v="every-step"].on'));
-  assert.ok(await p.has('.up-row[data-k="planPlace"] button[data-v="window"].on'),
-    'where the plan lives is a baseline answer, not a hidden default');
-  assert.ok(await p.has('.up-row[data-k="voice"] button[data-v="windows"].on'));
+  assert.equal(await p.count('.up-mode'), 3, 'three modes and nothing else up front');
+  assert.ok(await p.has('.up-mode[data-mode="simple"].on'), 'the mode they picked is the one shown');
+  assert.equal(await p.eval('document.querySelector(".up-advbody").hidden', false), true,
+    'the individual parameters must not be the first thing they see');
   await p.shot(SHOTS + '/settings-matt.png');
+
+  /* but they are still there, and still reflect what the mode set */
+  await p.click('.up-adv');
+  await p.waitFor('!document.querySelector(".up-advbody").hidden', 6000, 'advanced to open');
+  assert.ok(await p.has('.up-row[data-k="parallelism"] button[data-v="1"].on'));
+  assert.ok(await p.has('.up-row[data-k="checkins"] button[data-v="every-step"].on'));
+  assert.ok(await p.has('.up-row[data-k="planPlace"] button[data-v="chat"].on'));
 
   /* changing one takes effect on the server, not just in the panel */
   await p.click('.up-row[data-k="parallelism"] button[data-v="3"]');
@@ -50,7 +51,8 @@ test('settings: what the baseline set is visible and changeable afterwards', { t
   const me = await p.eval('fetch("api/me").then(r => r.json())');
   assert.equal(me.profile.stated.parallelism, 3, 'the change must reach the stored profile');
   assert.equal(me.profile.effective.maxApps, 3, 'and flow through to the budget the agent is held to');
-  assert.equal(me.profile.stated.planPlace, 'window', 'changing one setting must not reset the others');
+  assert.equal(me.profile.stated.planPlace, 'chat', 'changing one setting must not reset the others');
+  assert.equal(me.profile.effective.mode, 'custom', 'hand-tuning means no preset is claimed');
 
   /* it survives a reload */
   await p.goto(app.url + '/');
@@ -58,6 +60,8 @@ test('settings: what the baseline set is visible and changeable afterwards', { t
   assert.equal(await p.eval('window.__cham.profile().maxApps', false), 3);
   await p.click('#user-btn');
   await p.waitFor('document.querySelector("body.settings-open")', 6000);
+  await p.click('.up-adv');
+  await p.waitFor('!document.querySelector(".up-advbody").hidden', 6000);
   assert.ok(await p.has('.up-row[data-k="parallelism"] button[data-v="3"].on'));
 
   /* the panel closes on an outside click and does not cover the workspace */
@@ -81,7 +85,7 @@ test('settings: behaviour the system has learned is shown back to the learner', 
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  await signIn(p, 'kyle', 'YoungGuy', ['all', 'rarely', 'chat', 'chat', 'rich']);
+  await signIn(p, 'kyle', 'YoungGuy', 'extreme');
   const sid = await p.eval('window.__cham.sessionId()');
 
   /* enough evidence for the system to have an opinion */
@@ -120,9 +124,11 @@ test('settings: every knob is here, and switching a window off actually removes 
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  await signIn(p, 'kyle', 'YoungGuy', ['two', 'every-stage', 'window', 'windows', 'diagrams']);
+  await signIn(p, 'kyle', 'YoungGuy', 'balanced');
   await p.click('#user-btn');
   await p.waitFor('document.querySelector("body.settings-open")', 6000, 'settings panel');
+  await p.click('.up-adv');
+  await p.waitFor('!document.querySelector(".up-advbody").hidden', 6000, 'advanced');
 
   /* everything that changes behaviour is reachable from one place */
   for (const key of ['parallelism', 'checkins', 'planPlace', 'voice', 'chatter', 'depth', 'visuals', 'priorKnowledge']) {
@@ -162,8 +168,8 @@ test('settings: every knob is here, and switching a window off actually removes 
 
   /* and the baseline can be taken again */
   await p.click('.up-retake');
-  await p.waitFor('document.querySelector(".gate-progress")', 15000, 'the baseline to come back');
-  assert.equal(await p.count('.gate-progress i'), 5);
+  await p.waitFor('document.querySelector(".gate-options")', 15000, 'the baseline to come back');
+  assert.equal(await p.count('.gate-opt'), 3, 'and it is one question again, not five');
 
   assert.deepEqual(p.errors.filter(e => !/favicon/.test(e)), [], 'no uncaught page errors');
 });

@@ -68,9 +68,9 @@ body.booting #shell { opacity: 0; }
 .gate-glyph { width: 62px; height: 62px; object-fit: contain; margin-bottom: 12px; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.55)); }
 #gate-card h1 { font-size: 21px; font-weight: 600; letter-spacing: -0.3px; line-height: 1.3; }
 #gate-card p { margin-top: 9px; font-size: 12.5px; line-height: 1.6; color: var(--text-dim); }
-/* the question is a situation; the sub-line is what we are actually asking */
-#gate-card h1 { font-size: 17px; font-weight: 500; color: var(--text-dim); line-height: 1.45; }
-.gate-sub { margin-top: 7px !important; font-size: 15px !important; font-weight: 600; color: var(--text) !important; }
+/* the question leads; everything under it is quieter */
+#gate-card h1 { font-size: 21px; font-weight: 600; color: var(--text); line-height: 1.3; letter-spacing: -0.3px; }
+.gate-sub { margin-top: 8px !important; font-size: 12.5px !important; font-weight: 400; color: var(--text-dim) !important; }
 .gate-intro { font-size: 11.5px !important; color: var(--text-faint) !important; margin-top: 8px !important; }
 #gate-form { display: flex; flex-direction: column; gap: 9px; margin-top: 20px; }
 #gate-form input {
@@ -808,6 +808,17 @@ body.chat-center #hero { display: block; animation: hero-in 700ms var(--ease-spr
   padding: 6px;
   transition: bottom 500ms var(--ease-spring), background 400ms ease, border-color 400ms ease, box-shadow 400ms ease, padding 400ms ease;
 }
+/* Docked to a side the agent is a LAYER, not a panel: no card, no border, no
+   shadow — the conversation simply occupies its column and only the composer
+   is drawn. Apps are the things in boxes; the agent is not an app. */
+body.place-left #chatdock.fused,
+body.place-right #chatdock.fused {
+  background: transparent; backdrop-filter: none; border-color: transparent;
+  box-shadow: none; border-radius: 0; padding: 0;
+}
+body.place-left #chat-bar, body.place-right #chat-bar { opacity: 0.4; transition: opacity 180ms ease; }
+body.place-left #chatdock:hover #chat-bar, body.place-right #chatdock:hover #chat-bar { opacity: 1; }
+
 /* while the agent acts, the card collapses back to a bare composer */
 body.acting #chatdock.fused {
   background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0;
@@ -839,14 +850,24 @@ body:not(.has-msgs) #chat-log-wrap { display: none; }
 }
 body.place-left #chat-log, body.place-right #chat-log { max-height: none; }
 
-.msg { max-width: 88%; display: flex; flex-direction: column; align-self: flex-start; align-items: flex-start; animation: msg-in var(--t-in) var(--ease-out); }
+.msg { max-width: 92%; display: flex; flex-direction: column; align-self: flex-start; align-items: flex-start; animation: msg-in var(--t-in) var(--ease-out); }
+.msg.agent { max-width: 100%; }
 .msg.user { align-self: flex-end; align-items: flex-end; animation-name: msgInUser; }
 @keyframes msg-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
 @keyframes msgInUser { from { opacity: 0; transform: translateY(10px) translateX(8px) scale(0.97); } }
-.bubble { padding: 9px 13px; border-radius: 14px; font-size: 13px; line-height: 1.55; word-wrap: break-word; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
-.msg.user .bubble { background: var(--accent); border-color: transparent; color: #fff; border-bottom-right-radius: 5px; }
-.msg.agent .bubble { color: var(--text); border-bottom-left-radius: 5px; }
-.msg.error .bubble { background: rgba(220, 47, 106, 0.07); color: var(--bad); border-color: rgba(220, 47, 106, 0.3); }
+/* The agent is not an app. Its words are text on the surface, not a bubble in
+   a box — a bubble reads as another thing on the page, competing with the
+   things on the page. What the LEARNER says keeps a bubble: their turn is an
+   event, the agent's is running commentary. */
+.bubble { padding: 0; border-radius: 0; font-size: 13.5px; line-height: 1.62; word-wrap: break-word; background: none; border: 0; }
+.msg.user .bubble {
+  padding: 8px 13px; border-radius: 14px; border-bottom-right-radius: 5px;
+  background: rgba(93, 135, 255, 0.16); border: 1px solid rgba(93, 135, 255, 0.3);
+  color: var(--text); font-size: 13px;
+}
+.msg.agent .bubble { color: var(--text-dim); }
+.msg.agent .bubble strong { color: var(--text); }
+.msg.error .bubble { padding: 8px 12px; border-radius: 10px; background: rgba(220, 47, 106, 0.07); color: var(--bad); border: 1px solid rgba(220, 47, 106, 0.3); }
 .msg.chipline .bubble { display: none; }
 .msg.chipline { flex-direction: row; }
 
@@ -1676,3 +1697,33 @@ body.place-mini #chat-plan { display: none !important; }
 .cp-drafting .cp-step { cursor: default; }
 .cp-drafting .cp-step:hover { background: transparent; color: var(--text-dim); }
 .cp-writing { padding: 2px 12px 10px; }
+
+/* ---------------- the one control ----------------
+   Matt: "there should be just a slider — how crazy do you want to go… and all
+   of the parameters hang off just one." Everything else is still here, behind
+   Advanced, and still tracked either way. */
+.up-modes { display: flex; flex-direction: column; gap: 7px; margin: 14px 0 4px; }
+.up-mode {
+  text-align: left; padding: 11px 13px;
+  border: 1px solid var(--line-2); border-radius: 12px;
+  background: var(--fill-1); color: var(--text); cursor: pointer;
+  transition: all 160ms ease;
+}
+.up-mode b { display: block; font-size: 13px; font-weight: 600; }
+.up-mode span { display: block; font-size: 11px; color: var(--text-faint); margin-top: 3px; line-height: 1.45; }
+.up-mode:hover { border-color: var(--accent); background: rgba(93, 135, 255, 0.06); }
+.up-mode.on { border-color: var(--accent); background: rgba(93, 135, 255, 0.13); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.08); }
+.up-mode.on b::after { content: ' ✓'; color: var(--accent-2); }
+.up-adv {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  margin-top: 16px; padding: 9px 0;
+  border: 0; border-top: 1px solid var(--line); background: transparent;
+  color: var(--text-faint); cursor: pointer;
+  font: 500 10px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.1px;
+  transition: color 140ms ease;
+}
+.up-adv:hover { color: var(--text-dim); }
+.up-adv svg { width: 13px; height: 13px; transition: transform 240ms var(--ease-out); }
+.up-adv[aria-expanded="true"] svg { transform: rotate(180deg); }
+.up-advbody[hidden] { display: none; }
+.up-advbody .up-group:first-child { border-top: 0; padding-top: 0; margin-top: 4px; }

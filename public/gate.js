@@ -72,104 +72,43 @@
      Five questions, one screen each, phrased as situations rather than
      settings — people answer "what would you rather" far more honestly than
      "set your parallelism". */
-  const QUESTIONS = [
+  /* ONE question. The five-question version asked good things, but it is
+     friction in front of someone who just wants to start, and everything it
+     asked is either learned from use or said in the chat later. What is left
+     is the only choice that changes the shape of the product. */
+  const MODES = [
     {
-      key: 'spread',
-      q: 'You ask to learn something. Chameleon writes a lesson and a quiz on it.',
-      sub: 'What should it put on screen?',
-      options: [
-        { v: 'one', label: 'Just the lesson', sub: 'Bring the quiz when I have finished reading',
-          sets: { parallelism: 1, pace: 'guided' } },
-        { v: 'two', label: 'The lesson, quiz beside it', sub: 'I can glance across when I want to',
-          sets: { parallelism: 2, pace: 'blended' } },
-        { v: 'all', label: 'Everything it has made', sub: 'Lesson, quiz, cards — I like room to roam',
-          sets: { parallelism: 4, pace: 'firehose' } },
-      ],
+      v: 'simple', label: 'One thing at a time',
+      sub: 'A lesson, then a quiz — never both. It asks before moving on, and the plan lives in our conversation.',
     },
     {
-      key: 'checkins',
-      q: 'You have finished reading. Chameleon thinks you are ready for step 2.',
-      sub: 'What should it do?',
-      options: [
-        { v: 'every-step', label: 'Ask me first', sub: 'I will say when I am ready to move on' },
-        { v: 'every-stage', label: 'Carry on, ask at the end of a section', sub: 'Check in at the natural breaks' },
-        { v: 'rarely', label: 'Just go', sub: 'I will stop you if I need to' },
-      ],
+      v: 'balanced', label: 'A steady pace',
+      sub: 'Usually one thing, sometimes a second beside it. It checks in at natural breaks rather than every step.',
     },
     {
-      key: 'planPlace',
-      q: 'Chameleon has mapped out six steps to get you there.',
-      sub: 'Where do you want to see them?',
-      options: [
-        { v: 'chat', label: 'In the conversation', sub: 'So I can talk to it about the plan and say when I am ready' },
-        { v: 'window', label: 'In its own window', sub: 'Open beside the work, so I can see where I am at a glance' },
-      ],
-    },
-    {
-      key: 'voice',
-      q: 'There is a diagram on screen and Chameleon wants to point something out about it.',
-      sub: 'Where should it say that?',
-      options: [
-        { v: 'windows', label: 'Next to the diagram', sub: 'Where the thing it is talking about is', sets: { chatter: 'minimal' } },
-        { v: 'both', label: 'Both', sub: 'Beside the diagram, and the wider point in chat', sets: { chatter: 'normal' } },
-        { v: 'chat', label: 'In the chat', sub: 'I would rather it talked to me than annotated things', sets: { chatter: 'full' } },
-      ],
-    },
-    {
-      key: 'visuals',
-      q: 'It is explaining how something works — a process with a few moving parts.',
-      sub: 'What actually helps you?',
-      options: [
-        { v: 'plain', label: 'Write it out', sub: 'Clear prose and a table if it needs one' },
-        { v: 'diagrams', label: 'A diagram and the explanation', sub: 'Picture for the shape, words for the detail' },
-        { v: 'rich', label: 'Show me as much as possible', sub: 'Diagrams, charts, illustrations — I think in pictures' },
-      ],
+      v: 'extreme', label: 'Everything at once',
+      sub: 'Lesson, quiz and plan side by side, moving without asking. Room to jump around.',
     },
   ];
 
   function onboarding(user) {
-    const answers = {};
-    let i = 0;
+    show(`
+      <h1>How much at once?</h1>
+      <p class="gate-sub">${user ? `Hi ${esc(user.display_name)}. ` : ''}One question, and you can change it whenever — or just tell me.</p>
+      <div class="gate-options">
+        ${MODES.map(m => `<button class="gate-opt" data-v="${m.v}">
+          <b>${esc(m.label)}</b><span>${esc(m.sub)}</span></button>`).join('')}
+      </div>`);
 
-    const render = () => {
-      const q = QUESTIONS[i];
-      const chosen = answers[q.key];
-      show(`
-        <div class="gate-progress">${QUESTIONS.map((_, n) => `<i class="${n < i ? 'done' : n === i ? 'on' : ''}"></i>`).join('')}</div>
-        <h1>${esc(q.q)}</h1>
-        <p class="gate-sub">${esc(q.sub || '')}</p>
-        ${i === 0 ? `<p class="gate-intro">Five questions about how you like to work${user ? `, ${esc(user.display_name)}` : ''} — no right answers, and all of it changeable later.</p>` : ''}
-        <div class="gate-options">
-          ${q.options.map(o => `<button class="gate-opt ${chosen === o.v ? 'on' : ''}" data-v="${esc(o.v)}">
-              <b>${esc(o.label)}</b><span>${esc(o.sub)}</span></button>`).join('')}
-        </div>
-        <div class="gate-actions">
-          ${i > 0 ? '<button class="gate-back" type="button">Back</button>' : ''}
-          <button class="gate-next" type="button">Skip</button>
-        </div>`);
-
-      body.querySelectorAll('.gate-opt').forEach(b => b.onclick = () => {
-        const v = b.dataset.v;
-        answers[q.key] = v;
-        const opt = q.options.find(o => o.v === v);
-        if (opt && opt.sets) Object.assign(answers, opt.sets);
-        next();
-      });
-      const back = body.querySelector('.gate-back');
-      if (back) back.onclick = () => { i = Math.max(0, i - 1); render(); };
-      body.querySelector('.gate-next').onclick = next;
-    };
-
-    const next = async () => {
-      if (i < QUESTIONS.length - 1) { i++; render(); return; }
+    body.querySelectorAll('.gate-opt').forEach(b => b.onclick = async () => {
+      const mode = b.dataset.v;
+      body.querySelectorAll('.gate-opt').forEach(x => x.classList.toggle('on', x === b));
       show('<h1>Setting up your workspace…</h1><div class="gate-spin"></div>');
       try {
-        await api('api/profile', { onboarded: true, stated: answers });
+        await api('api/profile', { onboarded: true, mode });
       } catch { /* a failed save must not lock them out of their own app */ }
       done();
-    };
-
-    render();
+    });
   }
 
   /* ---------------- boot ---------------- */

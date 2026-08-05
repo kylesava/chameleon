@@ -15,6 +15,42 @@ const VISUALS = ['plain', 'diagrams', 'rich'];
 /* Where the spine lives. In chat it is something you talk to the agent about;
    in a window it is a thing beside the work. Matt wants the first. */
 const PLAN_PLACES = ['chat', 'window'];
+
+/* ONE control, and everything hangs off it.
+   Matt: "I love that we've got those [settings]. I don't love that we expose
+   them to users… I felt like there should be just a slider — how crazy do you
+   want to go. And all of the parameters hang off just one."
+   So a mode is a named bundle of every other setting. The individual settings
+   still exist, are still tracked, and are still changeable behind Advanced —
+   touching one just means you are no longer on a preset. */
+const MODES = {
+  simple: {
+    label: 'One thing at a time',
+    parallelism: 1, checkins: 'every-step', planPlace: 'chat',
+    voice: 'chat', chatter: 'full', depth: 'balanced', visuals: 'diagrams',
+  },
+  balanced: {
+    label: 'A steady pace',
+    parallelism: 2, checkins: 'every-stage', planPlace: 'chat',
+    voice: 'both', chatter: 'normal', depth: 'balanced', visuals: 'diagrams',
+  },
+  extreme: {
+    label: 'Everything at once',
+    parallelism: 4, checkins: 'rarely', planPlace: 'window',
+    voice: 'windows', chatter: 'minimal', depth: 'concise', visuals: 'rich',
+  },
+};
+const MODE_KEYS = Object.keys(MODES);
+const TUNED = ['parallelism', 'checkins', 'planPlace', 'voice', 'chatter', 'depth', 'visuals'];
+
+/* Which preset a set of settings corresponds to, or 'custom'. Derived rather
+   than stored, so hand-tuning and coaching cannot leave the label lying. */
+function modeOf(stated) {
+  for (const k of MODE_KEYS) {
+    if (TUNED.every(f => String(MODES[k][f]) === String(stated[f]))) return k;
+  }
+  return 'custom';
+}
 const TEACHABLE = ['lesson', 'quiz', 'flashcards', 'podcast', 'deck'];
 
 const DEFAULT_STATED = {
@@ -119,6 +155,7 @@ function derive(profile) {
     voice: stated.voice,
     chatter: stated.chatter,
     planPlace: stated.planPlace,
+    mode: modeOf(stated),
     visuals: stated.visuals,
     /* The windows the agent is allowed to build in at all. A learner who never
        wants a podcast should not be offered one and then have to close it. */
@@ -223,6 +260,6 @@ function brief(eff) {
 }
 
 module.exports = {
-  normalise, derive, applySignal, brief, confidenceOf,
+  normalise, derive, applySignal, brief, confidenceOf, modeOf, MODES, MODE_KEYS, TUNED,
   PACES, CHECKINS, DEPTHS, MODALITIES, DEFAULT_STATED,
 };
