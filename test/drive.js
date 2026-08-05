@@ -280,7 +280,10 @@ async function newPage(browser, port, url, size) {
        not, content is silently unreadable underneath. */
     async coveredTiles() {
       return evalIn(`(() => {
-        const dock = document.getElementById('chatdock');
+        /* The transcript is the canvas and app windows sit ON it, so the dock
+           overlapping a tile is the design. What must never be covered is the
+           composer — the agent's own container. */
+        const dock = document.getElementById('chat-form') || document.getElementById('chatdock');
         if (!dock) return [];
         const d = dock.getBoundingClientRect();
         if (!d.width || !d.height) return [];

@@ -1985,3 +1985,110 @@ body.agent-surface:not(.has-apps) #chatdock {
 body.agent-surface:not(.has-apps) #chat-log { font-size: 14.5px; }
 body.agent-surface:not(.has-apps) #chat-bar { display: none !important; }
 body.agent-surface #chatdock { transition: width 480ms var(--ease-out), left 480ms var(--ease-out), transform 480ms var(--ease-out); }
+
+/* ================= THE CANVAS IS THE CHAT =================
+   Matt, precisely:
+
+     "The chat history should always be on the background. There is a canvas on
+      the back of the thing, the dark layer that is underneath the app windows.
+      The canvas is where the text of the chat history is displayed. However
+      the chat input box is like an app container — a different colour,
+      differentiated from the canvas. But the text itself just lays on top of
+      the canvas… Only when the agent starts to invoke applications does the
+      chat history potentially disappear. It dissolves to the background."
+
+   So the transcript is not in a panel at all. It is painted across the whole
+   canvas, UNDER the app windows, and the composer is a container fixed beneath
+   it. Apps are opaque and float on top, so as they fill the screen they cover
+   the conversation — that IS the dissolve. Nothing is hidden by a rule; the
+   history stays exactly where it was and comes back as windows close. */
+body.canvas-chat #chatdock {
+  position: absolute;
+  left: 0 !important; right: 0 !important; top: 0 !important; bottom: 0 !important;
+  width: auto !important; transform: none !important;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 0 0 16px;
+  background: none !important; border: 0 !important; box-shadow: none !important;
+  backdrop-filter: none !important; border-radius: 0 !important;
+  pointer-events: none;              /* the canvas beneath stays reachable */
+  z-index: 1;                        /* .tile is 2 — apps cover the talk */
+}
+body.canvas-chat #chat-log-wrap {
+  flex: 1 1 auto; min-height: 0;
+  display: block !important; opacity: 1 !important;
+  overflow: hidden;
+  margin: 0 auto; width: min(760px, 84vw);
+  pointer-events: auto;
+}
+body.canvas-chat #chat-log {
+  height: 100%; max-height: none;
+  padding: 18px 4px 20px; gap: 18px;
+  overflow-y: auto; scrollbar-width: none;
+  justify-content: flex-end;         /* the newest sits just above the box */
+}
+body.canvas-chat #chat-log::-webkit-scrollbar { width: 0; }
+
+/* the composer: the one container, always in the same place */
+body.canvas-chat #chat-form,
+body.canvas-chat #chat-status,
+body.canvas-chat #pinned-btn,
+body.canvas-chat #chat-plan { pointer-events: auto; }
+body.canvas-chat #chat-form {
+  margin: 0 auto; width: min(760px, 84vw);
+  z-index: 3;                        /* above the app windows: never covered */
+  position: relative;
+}
+body.canvas-chat #chat-plan,
+body.canvas-chat #pinned-btn,
+body.canvas-chat #chat-status { margin-left: auto; margin-right: auto; width: min(760px, 84vw); }
+body.canvas-chat #pinned-btn { width: auto; margin-left: calc(50% - min(380px, 42vw)); }
+body.canvas-chat #chat-bar { display: none !important; }
+
+/* Windows are opaque, so they hide the talk behind them. What is still visible
+   dims a little while the agent is working, which is the "dissolve". */
+body.canvas-chat.has-apps #chat-log { opacity: 0.5; transition: opacity 420ms ease; }
+body.canvas-chat.acting #chat-log { opacity: 0.28; }
+body.canvas-chat #chat-log { transition: opacity 420ms ease; }
+body.canvas-chat.has-apps #chat-log-wrap:hover ~ * { }
+body.canvas-chat.has-apps #chat-log:hover { opacity: 0.95; }
+
+/* the workspace must not paint over the conversation */
+body.canvas-chat #canvas::after { z-index: 0; }
+body.canvas-chat #workspace { background: transparent; }
+/* the empty state is already the canvas — no separate centred mode needed */
+body.canvas-chat.chat-center #chatdock { top: 0 !important; bottom: 0 !important; }
+body.canvas-chat #hero { padding-bottom: 20px; }
+/* The agent's own furniture — the plan, the pinned chip, the status, the
+   composer — belongs to the agent, not to the canvas, so windows never cover
+   it. Only the transcript itself dissolves behind them. */
+body.canvas-chat #chat-form,
+body.canvas-chat #chat-plan,
+body.canvas-chat #pinned-btn,
+body.canvas-chat #chat-status { position: relative; z-index: 3; }
+/* the spine is furniture at the bottom of the agent surface: it must not grow
+   tall enough to shove itself under the topbar */
+/* Cap the STEP LIST, not the card: the head has to stay clickable and the
+   current step has to stay whole. */
+body.canvas-chat #chat-plan .cp-list { max-height: 26vh; overflow-y: auto; scrollbar-width: thin; }
+/* The conversation is the canvas, so there is no dock column to make room for:
+   the workspace spans the whole stage above the composer, and metrics() measures
+   the same thing. A mismatch here draws tiles wider than the canvas holding them. */
+body.canvas-chat #workspace {
+  left: 14px !important; right: 14px !important; top: 14px !important;
+  bottom: 14px !important;
+  opacity: 1 !important; pointer-events: auto !important;
+}
+/* keep the agent's furniture in one centred column with the composer */
+body.canvas-chat #chat-plan,
+body.canvas-chat #chat-status { width: min(760px, 84vw); margin-left: auto; margin-right: auto; }
+body.canvas-chat #pinned-btn { margin-left: auto; margin-right: auto; align-self: center; }
+/* #chatdock must NOT create a stacking context, or its children cannot rise
+   above the app windows however high their z-index: they would only be ordered
+   within the dock. The transcript sits below the windows, the agent's furniture
+   above them, and the dock itself takes no part. */
+body.canvas-chat #chatdock { z-index: auto !important; }
+body.canvas-chat #chat-log-wrap { position: relative; z-index: 1; }
+body.canvas-chat #chat-form,
+body.canvas-chat #chat-plan,
+body.canvas-chat #pinned-btn,
+body.canvas-chat #chat-status { z-index: 5; }

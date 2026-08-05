@@ -78,9 +78,10 @@ test('chat spine: the plan is in the conversation and there is no plan window', 
   await sleep(500);
 
   /* the whole plan is one click away, and steps are clickable triggers */
-  assert.equal(await p.eval('document.querySelector(".cp-list").hidden', false), true, 'the trail starts folded');
-  await p.click('.cp-head');
-  await p.waitFor('!document.querySelector(".cp-list").hidden', 6000, 'the step list to open');
+  /* open it explicitly rather than toggling — the earlier overlap checks
+     already opened and closed it, and a blind toggle depends on that history */
+  if (await p.eval('document.querySelector(".cp-list").hidden', false)) await p.click('.cp-head');
+  await p.waitFor('!document.querySelector(".cp-list").hidden', 8000, 'the step list to open');
   assert.equal(await p.count('.cp-step'), 3);
   assert.equal(await p.count('.cp-step.doing'), 1, 'exactly one live step');
 

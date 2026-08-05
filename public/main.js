@@ -81,7 +81,10 @@
   document.body.classList.remove('booting');
   /* The agent is the surface, not a panel on it: the transcript lies on the
      canvas and only the composer is a container. */
-  document.body.classList.add('agent-surface');
+  /* The canvas IS the conversation: the transcript is painted across the
+     background under the app windows, and the composer is the one container
+     fixed beneath it. */
+  document.body.classList.add('agent-surface', 'canvas-chat');
   const params = new URLSearchParams(location.search);
   const boot = await api('api/state' + (params.has('session') ? `?session=${params.get('session')}` : ''));
   state.profile = (boot.profile && boot.profile.effective) || { maxApps: 4, checkinEvery: 'stage', depth: 'balanced' };
@@ -789,14 +792,29 @@
   const DOCK_W = 400; // keep in sync with --dock-side-w in style.css
   const MINI_H = 96;  // the minimised pill's real footprint (see body.place-mini)
   function metrics() {
-    const r = stage.getBoundingClientRect();
+    /* Measure the canvas the tiles are positioned inside. Measuring the stage
+       instead let the two disagree, and tiles were drawn wider than the box
+       holding them. */
+    const wsEl = document.getElementById('workspace');
+    const r = (document.body.classList.contains('canvas-chat') && wsEl)
+      ? wsEl.getBoundingClientRect() : stage.getBoundingClientRect();
     const centered = document.body.classList.contains('chat-center');
     const place = Chat.place();
     let width = r.width - 28;
     let height = r.height - 28;
     if (!centered) {
       // a side dock takes its own column; the centre dock reserves a bottom strip
-      if (place === 'left' || place === 'right') width -= DOCK_W + 12;
+      /* Everything below the transcript — the plan, the pinned chip, the
+         composer — is fixed furniture the windows must not be drawn over.
+         Measure it rather than guessing, because the plan grows. */
+      if (document.body.classList.contains('canvas-chat')) {
+        const form = document.getElementById('chat-form');
+        const plan = document.getElementById('chat-plan');
+        const stack = (form ? form.offsetHeight : 44)
+          + (plan && !plan.hidden ? plan.offsetHeight + 9 : 0);
+        height -= Math.min(Math.round(stack) + 12, Math.round(r.height * 0.6));
+      }
+      else if (place === 'left' || place === 'right') width -= DOCK_W + 12;
       /* The centred card floats over the canvas, and it is no longer a fixed
          height — with the plan living inside it, it grows with the plan. Measure
          it rather than guessing, so a tile is never drawn underneath it. */
@@ -845,7 +863,10 @@
     let maxX = 0;
     result.placed.forEach(p => { maxX = Math.max(maxX, p.x + p.w); });
     const anyPinned = result.placed.some(p => p.pinned);
-    const offset = (!anyPinned && maxX) ? Math.max(0, (m.width - (px({ x: maxX, y: 0 }) - GAP)) / 2) : 0;
+    /* With the conversation on the canvas the workspace already uses the full
+       width, so centring the grid on top of it pushes tiles off the right. */
+    const offset = (!anyPinned && maxX && !document.body.classList.contains('canvas-chat'))
+      ? Math.max(0, (m.width - (px({ x: maxX, y: 0 }) - GAP)) / 2) : 0;
 
     const placedIds = new Set(result.placed.map(p => p.id));
     for (const [id, t] of tiles) {

@@ -398,116 +398,38 @@ test('sweep 2: empty states, and the apps menu at three viewports', { timeout: 6
   } finally { dump('EMPTY STATES / LAUNCHER', problems); }
 });
 
-test('sweep 3: the chat dock — drag to every edge, the corner, and collapse', { timeout: 600000 }, async t => {
+test('sweep 3: the agent surface is fixed, and the composer is never covered', { timeout: 300000 }, async t => {
   const app = await serve();
-  const br = await open({ headless: true, width: 1440, height: 900 });
+  const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
-  const problems = [];
-  try {
-  const sid = await signIn(p);
-  await seedPlan(p, sid);
-  await p.goto(app.url + `/?session=${sid}`);
-  await p.waitFor('document.querySelector(".plan-now")', 15000, 'plan');
-  await openApp(p, 'lesson');
-  await openApp(p, 'quiz');
 
-  /* the drag handle only exists once there is history to hold, so give the
-     surface a transcript the way a real turn would */
-  await p.eval(`Chat.renderHistory([{ role: 'user', content: 'teach me about vaccines' },
-    { role: 'agent', content: 'Here is the plan — we will start with what a vaccine actually hands your body.' }], true); true`, false);
-  await sleep(500);
-  const gripBox = await p.box('#chat-grip');
-  if (!gripBox || gripBox.w === 0) note(problems, { issue: '#chat-grip has no box even with history present' });
+  await signIn(p);
 
-  /* --- does the panel follow the cursor mid-drag? --- */
-  const follow = await p.eval(`(async () => {
-    const bar = document.getElementById('chat-bar');
-    const dock = document.getElementById('chatdock');
-    const r = bar.getBoundingClientRect();
-    const x0 = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
-    const fire = (el, type, x, y) => el.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
-    fire(bar, 'mousedown', x0, y0);
-    fire(window, 'mousemove', x0 - 240, y0 - 120);
-    await new Promise(r2 => requestAnimationFrame(r2));
-    const lifted = document.body.classList.contains('chat-lifted');
-    const tf = getComputedStyle(dock).transform;
-    const zones = [...document.querySelectorAll('.zone')].map(z => ({ id: z.id, armed: z.classList.contains('arm'), op: getComputedStyle(z).opacity }));
-    fire(window, 'mouseup', x0 - 240, y0 - 120);
-    await new Promise(r2 => setTimeout(r2, 400));
-    return { lifted, transform: tf, zones, after: document.body.className };
-  })()`);
-  console.log('\n--- mid-drag ---\n  ' + JSON.stringify(follow));
-  if (!follow.lifted) note(problems, { issue: 'dragging the chat bar does not lift the panel (no .chat-lifted)' });
-  if (follow.transform === 'none') note(problems, { issue: 'the panel does not move with the cursor while dragging' });
+  /* The chat no longer docks anywhere: the transcript is the canvas and the
+     composer is the one container, in the same place always. */
+  assert.equal(await p.has('#chat-grip:not([hidden])') && await p.eval(
+    'getComputedStyle(document.getElementById("chat-bar")).display !== "none"', false), false,
+  'there is nothing left to drag — the surface is the background');
 
-  const sr = await p.box('#stage');
-  const targets = {
-    left: { x: Math.round(sr.left + 90), y: Math.round(sr.top + sr.h / 2) },
-    right: { x: Math.round(sr.right - 90), y: Math.round(sr.top + sr.h / 2) },
-    center: { x: Math.round(sr.left + sr.w / 2), y: Math.round(sr.bottom - 200) },
-    mini: { x: Math.round(sr.right - 80), y: Math.round(sr.bottom - 40) },
-  };
-  for (const [want, to] of Object.entries(targets)) {
-    await p.drag('#chat-grip', to);
-    await sleep(900);
-    const cls = await p.eval('document.body.className', false);
-    if (!cls.includes('place-' + want)) note(problems, { drag: want, issue: 'did not dock where it was dropped', bodyClass: cls });
-    const dock = await p.box('#chatdock');
-    const vpw = 1440, vph = 900;
-    if (dock.left < -2 || dock.right > vpw + 2 || dock.top < -2 || dock.bottom > vph + 2)
-      note(problems, { drag: want, issue: 'dock is partly off-screen', dock });
-    const ov = await overlaps(p);
-    if (ov.length) note(problems, { drag: want, overlaps: ov });
-    const of = await p.overflowing();
-    if (of.length) note(problems, { drag: want, offscreen: of });
-    await shot(p, `dock-${want}`);
+  const before = await p.box('#chat-form');
+  for (const size of [[1280, 800], [1024, 768], [1440, 900]]) {
+    await p.eval(`window.resizeTo(${size[0]}, ${size[1]})`, false).catch(() => {});
+    await sleep(200);
   }
+  const after = await p.box('#chat-form');
+  assert.ok(Math.abs(after.bottom - before.bottom) < 40, 'the composer stays put');
 
-  /* minimised: the pill must not sit on a window */
-  const mini = await p.eval(`(() => {
-    const d = document.getElementById('chatdock').getBoundingClientRect();
-    const ws = document.getElementById('workspace').getBoundingClientRect();
-    const tiles = [...document.querySelectorAll('.tile')].map(t => { const r = t.getBoundingClientRect();
-      return { name: (t.querySelector('.tile-name')||{}).textContent, bottom: Math.round(r.bottom), right: Math.round(r.right) }; });
-    return { dockTop: Math.round(d.top), dockH: Math.round(d.height), wsBottom: Math.round(ws.bottom), tiles };
-  })()`, false);
-  console.log('\n--- minimised ---\n  ' + JSON.stringify(mini));
-  if (mini.dockTop < mini.wsBottom - 1)
-    note(problems, { issue: 'minimised dock rises above the reserved strip', mini });
-
-  /* click the pill to restore, then exercise the collapse chevron */
-  await p.click('#chat-where');
-  await sleep(800);
-  const restored = await p.eval('document.body.className', false);
-  if (restored.includes('place-mini')) note(problems, { issue: 'clicking the minimised pill did not restore it', bodyClass: restored });
-
-  const chevron = [];
-  for (let i = 0; i < 4; i++) {
-    await p.click('#chat-collapse');
-    await sleep(600);
-    chevron.push(await p.eval(`(() => {
-      const b = document.getElementById('chat-collapse');
-      const wrap = document.getElementById('chat-log-wrap');
-      const svg = b.querySelector('svg');
-      return { collapsed: document.body.classList.contains('chat-collapsed'),
-        rows: getComputedStyle(wrap).gridTemplateRows, op: getComputedStyle(wrap).opacity,
-        logH: Math.round(document.getElementById('chat-log').getBoundingClientRect().height),
-        rotate: getComputedStyle(svg).transform, title: b.title };
-    })()`, false));
+  /* and windows never cover it, however many are open */
+  for (const id of ['lesson', 'quiz', 'flashcards']) {
+    await p.click('#apps-btn'); await sleep(220);
+    await p.click(`.ap-row[data-id="${id}"]`); await sleep(500);
+    const top = await p.topAt('#chat-input');
+    assert.ok(top && !top.covered, `${id} covers the composer`);
   }
-  console.log('\n--- collapse chevron ---');
-  for (const c of chevron) console.log('  ' + JSON.stringify(c));
-  for (let i = 0; i < chevron.length; i++) {
-    const want = i % 2 === 0;
-    if (chevron[i].collapsed !== want) note(problems, { issue: 'collapse toggle out of step', i, got: chevron[i] });
-    if (want && chevron[i].logH > 2) note(problems, { issue: 'history still has height while collapsed', i, got: chevron[i] });
-  }
-  await shot(p, 'dock-collapsed');
+  assert.deepEqual(await p.coveredTiles(), [], 'nor does the composer cover them');
 
-  const errs = p.errors.filter(e => !/favicon/.test(e));
-  if (errs.length) note(problems, { pageErrors: errs });
-  } finally { dump('CHAT DOCK', problems); }
+  assert.deepEqual(p.errors.filter(e => !/favicon/.test(e)), [], 'no uncaught page errors');
 });
 
 test('sweep 4: the working status pill never floats over a window', { timeout: 600000 }, async t => {
