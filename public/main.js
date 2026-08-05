@@ -77,8 +77,11 @@
   }
 
   /* ---------------- boot ---------------- */
-  await Gate.ready();                       // sign-in and baseline come first
+  await Gate.ready();                       // sign-in comes first
   document.body.classList.remove('booting');
+  /* The agent is the surface, not a panel on it: the transcript lies on the
+     canvas and only the composer is a container. */
+  document.body.classList.add('agent-surface');
   const params = new URLSearchParams(location.search);
   const boot = await api('api/state' + (params.has('session') ? `?session=${params.get('session')}` : ''));
   state.profile = (boot.profile && boot.profile.effective) || { maxApps: 4, checkinEvery: 'stage', depth: 'balanced' };
@@ -237,13 +240,31 @@
 
   const APP_TOGGLES = ['lesson', 'quiz', 'flashcards', 'podcast', 'deck'];
 
-  /* The one control everything hangs off. The rest still exists — it is just
-     not the first thing a new person is asked to reason about. */
-  const MODE_CARDS = [
-    { v: 'simple', label: 'One thing at a time', sub: 'A lesson, then a quiz. Asks before moving on.' },
-    { v: 'balanced', label: 'A steady pace', sub: 'Usually one thing, sometimes two. Checks in at breaks.' },
-    { v: 'extreme', label: 'Everything at once', sub: 'Side by side, moving without asking.' },
+  /* ONE dial. Matt: "there should be just a slider — how crazy do you want to
+     go. Like, there's slow walk, walk, run, sprint." Ordered, so moving it
+     reads as a matter of degree rather than a choice between products. */
+  const LEVELS = [
+    { v: 'slow-walk', label: 'Slow walk', sub: 'One thing on screen. Waits for you before every step.' },
+    { v: 'walk', label: 'Walk', sub: 'Usually one thing, sometimes a second. Checks in at breaks.' },
+    { v: 'run', label: 'Run', sub: 'A few things at once, moving without asking.' },
+    { v: 'sprint', label: 'Sprint', sub: 'Everything it has, side by side, as fast as it can.' },
   ];
+  const levelIndex = m => Math.max(0, LEVELS.findIndex(l => l.v === m));
+
+  function paceDial(mode) {
+    const i = levelIndex(mode);
+    const custom = mode === 'custom';
+    return `
+      <div class="dial ${custom ? 'dial-custom' : ''}">
+        <input type="range" id="pace" min="0" max="${LEVELS.length - 1}" step="1"
+          value="${custom ? '' : i}" aria-label="Pace">
+        <div class="dial-ticks">${LEVELS.map((l, n) =>
+    `<span class="${!custom && n === i ? 'on' : ''}">${l.label}</span>`).join('')}</div>
+        <p class="dial-sub">${custom
+    ? 'Tuned by hand — move the dial to go back to a setting.'
+    : Apps.esc(LEVELS[i].sub)}</p>
+      </div>`;
+  }
 
   function renderUserPop() {
     const eff = state.profile || {};
@@ -269,11 +290,7 @@
         <span>how you like to work</span>
       </div>
       <div class="up-body"><div class="up-scroll">
-        <div class="up-modes">
-          ${MODE_CARDS.map(m => `<button class="up-mode ${mode === m.v ? 'on' : ''}" data-mode="${m.v}">
-            <b>${m.label}</b><span>${m.sub}</span></button>`).join('')}
-        </div>
-        ${mode === 'custom' ? '<span class="up-note">Tuned by hand. Pick one above to go back to a preset.</span>' : ''}
+        ${paceDial(mode)}
 
         <button class="up-adv" aria-expanded="${advOpen}">
           <span>Advanced</span>
@@ -330,17 +347,26 @@
       } catch { /* the next open re-reads the truth from the server */ }
     };
 
-    userPop.querySelectorAll('.up-mode').forEach(b => b.onclick = async () => {
-      const m = b.dataset.mode;
-      userPop.querySelectorAll('.up-mode').forEach(x => x.classList.toggle('on', x === b));
-      try {
-        const r = await api('api/profile', { mode: m });
-        if (r.profile) { stated = r.profile.stated; state.profile = r.profile.effective; }
-      } catch { /* the next open re-reads the truth from the server */ }
-      renderUserPop();
-      paintPlan();
-      relayout();
-    });
+    const dial = userPop.querySelector('#pace');
+    if (dial) {
+      /* paint as they drag, save when they let go */
+      dial.oninput = () => {
+        const l = LEVELS[Number(dial.value)];
+        const sub = userPop.querySelector('.dial-sub');
+        if (sub) sub.textContent = l.sub;
+        userPop.querySelectorAll('.dial-ticks span').forEach((x, n) => x.classList.toggle('on', n === Number(dial.value)));
+        userPop.querySelector('.dial').classList.remove('dial-custom');
+      };
+      dial.onchange = async () => {
+        try {
+          const r = await api('api/profile', { mode: LEVELS[Number(dial.value)].v });
+          if (r.profile) { stated = r.profile.stated; state.profile = r.profile.effective; }
+        } catch { /* the next open re-reads the truth from the server */ }
+        renderUserPop();
+        paintPlan();
+        relayout();
+      };
+    }
     userPop.querySelector('.up-adv').onclick = () => {
       userPop.dataset.adv = advOpen ? '0' : '1';
       renderUserPop();
@@ -386,7 +412,13 @@
       if (findApp('plan')) { closeApp('plan'); relayout(); }
       Apps.chatPlan(chatPlanEl);
       // the spine appearing must not be hidden behind a collapsed transcript
-      if (state.plan && state.plan.tasks.length) Chat.showPlan();
+      if (state.plan && state.plan.tasks.length) {
+        Chat.showPlan();
+        /* The plan is the message people come back to, so it pins itself the
+           moment it exists rather than waiting to be buried. */
+        chatPlanEl.classList.add('pinned');
+        Chat.syncPins();
+      }
     } else {
       chatPlanEl.hidden = true;
       chatPlanEl.innerHTML = '';
@@ -783,6 +815,8 @@
   }
 
   function relayout() {
+    // the transcript recedes when there is something in front of it
+    document.body.classList.toggle('has-apps', state.apps.length > 0);
     let result;
     let guard = 0;
     while (true) {
@@ -1216,6 +1250,13 @@
     planPlace: () => (state.profile || {}).planPlace,
     endTurn: () => enqueue({ t: '_end' }),
   };
+
+  /* Annotations: mark anything in any app and talk to the agent about it. */
+  Annotate.configure({
+    send: d => document.dispatchEvent(new CustomEvent('chameleon:event', { detail: d })),
+    appName: id => (REGISTRY[id] || {}).name || id,
+  });
+  Annotate.start();
 
   relayout();
   paintPlan();          // the spine, wherever this learner keeps it

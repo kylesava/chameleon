@@ -1737,3 +1737,251 @@ body.place-mini #chat-plan { display: none !important; }
 .up-adv[aria-expanded="true"] svg { transform: rotate(180deg); }
 .up-advbody[hidden] { display: none; }
 .up-advbody .up-group:first-child { border-top: 0; padding-top: 0; margin-top: 4px; }
+
+/* ---------------- the pace dial ----------------
+   One control, and every parameter hangs off it. Matt: "there should be just a
+   slider — how crazy do you want to go. Like, there's slow walk, walk, run,
+   sprint." A range input rather than a row of buttons, because the difference
+   between the settings is one of degree, not of kind. */
+.dial { margin: 18px 0 4px; }
+.dial input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; border-radius: 3px; outline: none;
+  background: linear-gradient(90deg, var(--accent) 0%, #7b5cff 100%);
+  cursor: pointer;
+}
+.dial-custom input[type="range"] { background: var(--line-2); }
+.dial input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(93, 135, 255, 0.25);
+  cursor: grab; transition: transform 140ms ease, box-shadow 140ms ease;
+}
+.dial input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.12); }
+.dial input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; transform: scale(1.05); }
+.dial input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(93, 135, 255, 0.25);
+  cursor: grab;
+}
+.dial-ticks { display: flex; justify-content: space-between; margin-top: 10px; }
+.dial-ticks span {
+  flex: 1; text-align: center;
+  font: 500 10px 'IBM Plex Mono', monospace; letter-spacing: 0.4px;
+  color: var(--text-faint); transition: color 180ms ease;
+}
+.dial-ticks span:first-child { text-align: left; }
+.dial-ticks span:last-child { text-align: right; }
+.dial-ticks span.on { color: var(--accent-2); font-weight: 600; }
+.dial-sub {
+  margin-top: 10px !important; min-height: 32px;
+  font-size: 11.5px !important; line-height: 1.5; color: var(--text-dim) !important;
+}
+#gate-card .dial-sub { text-align: center; }
+.gate-go {
+  min-width: 130px; height: 40px; border: 0; border-radius: 11px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 13px 'IBM Plex Sans', sans-serif;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+.gate-go:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+/* ================= the agent surface =================
+   Matt's spec, and the whole point of the separation:
+
+     "The chat is really two parts, fused together and never appearing in
+      separate places… the chat input box should always be underneath the chat
+      history. However the chat history should always be on the background —
+      the canvas, the dark layer underneath the app windows. The chat input box
+      is like an app container. It needs to be a different colour, it needs to
+      be differentiated from the canvas. But the text itself just lays on top
+      of the canvas."
+
+   So: the transcript is text on the canvas — no card, no panel, nothing to
+   mistake for a window. The composer is the only container, and it is the one
+   thing that never moves. The agent is the surface; the apps sit on top of it. */
+body.agent-surface #chatdock,
+body.agent-surface #chatdock.fused {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+/* the transcript, laid straight on the canvas */
+body.agent-surface #chat-log {
+  padding: 0 2px 16px;
+  gap: 16px;
+  scrollbar-width: none;
+}
+body.agent-surface #chat-log::-webkit-scrollbar { width: 0; }
+body.agent-surface .msg.agent .bubble {
+  color: var(--text-dim);
+  font-size: 14px; line-height: 1.68;
+}
+body.agent-surface .msg.user .bubble {
+  background: transparent; border: 0; padding: 0;
+  color: var(--text); font-weight: 500;
+}
+/* the learner's turn still reads as a turn, without becoming a box */
+body.agent-surface .msg.user { align-self: flex-start; align-items: flex-start; max-width: 100%; }
+body.agent-surface .msg.user .bubble::before {
+  content: ''; display: block; width: 22px; height: 2px; border-radius: 2px;
+  background: var(--accent); margin-bottom: 7px;
+}
+
+/* the composer: the one container on the surface */
+body.agent-surface #chat-form {
+  background: linear-gradient(180deg, #1b202a, #141922);
+  border: 1px solid var(--line-2);
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  padding: 5px;
+}
+body.agent-surface #chat-form:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 3px rgba(93, 135, 255, 0.12);
+}
+body.agent-surface #chat-input { background: transparent; border: 0; }
+body.agent-surface #chat-input:focus { box-shadow: none; }
+
+/* Apps take the foreground; the transcript recedes into the canvas it was
+   already lying on rather than being clipped away. The composer never moves. */
+body.agent-surface.has-apps #chat-log-wrap { opacity: 0; pointer-events: none; }
+body.agent-surface.has-apps #chat-log { transform: translateY(14px); }
+body.agent-surface #chat-log-wrap {
+  transition: opacity 320ms ease, grid-template-rows 380ms var(--ease-spring);
+}
+body.agent-surface #chat-log { transition: transform 380ms var(--ease-out); }
+
+/* ---------------- pinned messages ----------------
+   A conversation that runs long buries the thing you keep coming back to.
+   Anything can be pinned; the plan pins itself, because it is the message
+   people return to most. */
+.msg { position: relative; }
+.msg-pin {
+  position: absolute; top: -2px; right: -4px;
+  width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-faint); cursor: pointer; opacity: 0;
+  display: grid; place-items: center;
+  transition: opacity 150ms ease, color 140ms ease, background 140ms ease;
+}
+.msg-pin svg { width: 12px; height: 12px; }
+.msg:hover .msg-pin { opacity: 1; }
+.msg-pin:hover { color: var(--accent-2); background: rgba(93, 135, 255, 0.12); }
+.msg.pinned .msg-pin { opacity: 1; color: var(--accent-2); }
+.msg.pinned .bubble { border-left: 2px solid rgba(93, 135, 255, 0.5); padding-left: 11px; }
+/* viewing only what was pinned */
+body.pinned-only .msg:not(.pinned) { display: none; }
+#pinned-btn {
+  align-self: flex-start; display: flex; align-items: center; gap: 6px;
+  margin: 0 0 8px 2px; padding: 5px 10px;
+  border: 1px solid var(--line-2); border-radius: 999px;
+  background: var(--fill-1); color: var(--text-faint); cursor: pointer;
+  font: 500 10.5px 'IBM Plex Sans', sans-serif;
+  transition: all 150ms ease;
+}
+#pinned-btn svg { width: 11px; height: 11px; }
+#pinned-btn:hover { color: var(--text); border-color: var(--accent); }
+#pinned-btn.on { color: var(--accent-2); border-color: var(--accent); background: rgba(93, 135, 255, 0.12); }
+#pinned-btn[hidden] { display: none; }
+body.acting #pinned-btn { display: none; }
+
+/* ---------------- annotations ----------------
+   Mark something in an app and talk to the agent about that exact thing. */
+.annot-mark {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px; border-radius: 4px;
+  background: rgba(93, 135, 255, 0.1);
+}
+::selection { background: rgba(93, 135, 255, 0.35); }
+.annot {
+  position: fixed; z-index: 220;
+  padding: 9px; border-radius: 13px;
+  background: linear-gradient(180deg, #1b202a, #12161e);
+  border: 1px solid var(--accent);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  animation: rise 220ms var(--ease-out);
+}
+.annot-quote {
+  font-size: 10.5px; line-height: 1.45; color: var(--text-faint);
+  padding: 0 3px 7px; margin-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid var(--accent); padding-left: 8px;
+  max-height: 44px; overflow: hidden;
+}
+.annot-input {
+  width: 100%; resize: none; min-height: 34px;
+  border: 0; background: transparent; color: var(--text);
+  font: 400 12.5px 'IBM Plex Sans', sans-serif; line-height: 1.5;
+  padding: 2px 3px; outline: none;
+}
+.annot-actions { display: flex; gap: 6px; margin-top: 6px; }
+.annot-add {
+  flex: 1; height: 28px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text-dim);
+  font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: all 140ms ease;
+}
+.annot-add:hover { color: var(--text); border-color: var(--accent); }
+.annot-send {
+  flex: 1; height: 28px; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 11px 'IBM Plex Sans', sans-serif;
+  transition: filter 140ms ease;
+}
+.annot-send:hover { filter: brightness(1.12); }
+
+/* the batch: marks collected but not yet sent */
+#annot-bar {
+  position: fixed; z-index: 210; left: 50%; bottom: 18px;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 9px;
+  max-width: min(760px, 92vw);
+  padding: 8px 9px 8px 14px;
+  border-radius: 999px;
+  background: rgba(18, 22, 30, 0.97);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--accent);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  animation: rise 260ms var(--ease-spring);
+}
+.ab-count { font: 600 10.5px 'IBM Plex Mono', monospace; color: var(--accent-2); white-space: nowrap; }
+.ab-list { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+.ab-list::-webkit-scrollbar { height: 0; }
+.ab-item {
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  padding: 4px 8px; border-radius: 999px;
+  border: 1px solid var(--line-2); background: var(--fill-1);
+  color: var(--text-dim); cursor: pointer;
+  font: 400 10.5px 'IBM Plex Sans', sans-serif;
+  transition: all 140ms ease;
+}
+.ab-item i { font-style: normal; color: var(--text-faint); }
+.ab-item:hover { border-color: var(--bad); color: var(--text); }
+.ab-item:hover i { color: var(--bad); }
+.ab-send {
+  flex: 0 0 auto; height: 28px; padding: 0 14px;
+  border: 0; border-radius: 999px; background: var(--accent); color: #fff;
+  font: 600 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: filter 140ms ease;
+}
+.ab-send:hover { filter: brightness(1.12); }
+
+/* With nothing in front of it the transcript IS the canvas, so it gets a
+   comfortable reading column rather than a 400px gutter. When apps open it
+   yields the middle and retreats to its dock — the composer never moves
+   between the two, it just narrows. */
+body.agent-surface:not(.has-apps) #chatdock {
+  left: 50% !important; right: auto !important;
+  width: min(720px, 92vw) !important;
+  transform: translateX(-50%);
+  top: 64px !important; bottom: 18px !important;
+  justify-content: flex-end !important;
+}
+body.agent-surface:not(.has-apps) #chat-log { font-size: 14.5px; }
+body.agent-surface:not(.has-apps) #chat-bar { display: none !important; }
+body.agent-surface #chatdock { transition: width 480ms var(--ease-out), left 480ms var(--ease-out), transform 480ms var(--ease-out); }

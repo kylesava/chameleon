@@ -12,7 +12,7 @@ if (!process.env.PERSONA) {
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const idle = p => p.waitFor('!document.body.classList.contains("busy")', 300000, 'the agent to finish');
 
@@ -23,7 +23,7 @@ const ASKS = [
   { t: 'Help me prepare for a driving theory test', plan: true },
 ];
 
-for (const mode of ['simple', 'extreme']) {
+for (const mode of ['slow-walk', 'sprint']) {
   test(`triage: small asks are answered, big ones are planned (${mode})`, { timeout: 900000 }, async t => {
     const app = await serve();
     const br = await open({ headless: true });
@@ -34,8 +34,7 @@ for (const mode of ['simple', 'extreme']) {
     await p.fill('#gate-user', 'kyle');
     await p.fill('#gate-pass', 'YoungGuy');
     await p.click('#gate-form button');
-    await p.waitFor('document.querySelector(".gate-options")', 15000, 'the one question');
-    await p.click(`.gate-opt[data-v="${mode}"]`);
+  await pickPace(p, mode);
     await p.waitFor('!document.getElementById("gate")', 15000, 'gate');
     await p.waitFor('window.__cham && window.__cham.sessionId()', 12000, 'boot');
 

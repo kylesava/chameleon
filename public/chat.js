@@ -159,12 +159,45 @@
   function addMsg(role, html, cls = '') {
     const el = document.createElement('div');
     el.className = `msg ${role} ${cls}`;
-    el.innerHTML = `<div class="bubble"></div>`;
+    el.innerHTML = `<div class="bubble"></div><button class="msg-pin" title="Pin this">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h4l-.5 4 2.5 2v1H4V8l2.5-2z"/><path d="M8 9v5"/></svg></button>`;
     el.querySelector('.bubble').innerHTML = html;
+    el.querySelector('.msg-pin').onclick = e => { e.stopPropagation(); togglePin(el); };
     log.appendChild(el);
     scroll();
     return el;
   }
+
+  /* ---------------- pinned messages ----------------
+     A long conversation buries the thing you keep coming back to. Anything can
+     be pinned; the plan pins itself the moment the agent makes one, because
+     that is the message people return to most. */
+  const pinnedBtn = document.getElementById('pinned-btn');
+  let pinnedOnly = false;
+
+  const planEl = document.getElementById('chat-plan');
+  function countPins() {
+    return log.querySelectorAll('.msg.pinned').length
+      + (planEl && planEl.classList.contains('pinned') && !planEl.hidden ? 1 : 0);
+  }
+  function syncPins() {
+    const n = countPins();
+    pinnedBtn.hidden = n === 0;
+    pinnedBtn.querySelector('span').textContent = pinnedOnly ? 'Show everything' : `${n} pinned`;
+    pinnedBtn.classList.toggle('on', pinnedOnly);
+    document.body.classList.toggle('pinned-only', pinnedOnly && n > 0);
+    if (!n && pinnedOnly) { pinnedOnly = false; document.body.classList.remove('pinned-only'); }
+  }
+  function togglePin(el) {
+    el.classList.toggle('pinned');
+    syncPins();
+  }
+  function pin(el) {
+    if (!el) return;
+    el.classList.add('pinned');
+    syncPins();
+  }
+  pinnedBtn.onclick = () => { pinnedOnly = !pinnedOnly; syncPins(); scroll(); };
 
   const addUser = text => addMsg('user', Apps.esc(text));
   const addAgent = text => addMsg('agent', md(text));
@@ -336,7 +369,7 @@
     send,
     sendEvent: (desc, label, icon) => send(`[UI EVENT] The user ${desc}`, 'event', { label, icon }),
     renderHistory, addAgent, addUser, addChip, addNarration, addError,
-    turnSettled, stop, setStatus, tuck,
+    turnSettled, stop, setStatus, tuck, pin, syncPins,
     /* The spine has appeared in the conversation — make sure the surface it
        lives on is a card and not the full-screen hero. */
     showPlan() {

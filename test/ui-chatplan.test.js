@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 
@@ -22,8 +22,7 @@ async function asMatt(p, url, mode) {
   await p.fill('#gate-user', 'matt');
   await p.fill('#gate-pass', 'OldGuy');
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-options")', 15000, 'the one question');
-  await p.click(`.gate-opt[data-v="${mode}"]`);
+  await pickPace(p, mode);
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 12000, 'boot');
   const sid = await p.eval('window.__cham.sessionId()');
@@ -39,7 +38,7 @@ test('chat spine: the plan is in the conversation and there is no plan window', 
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  const sid = await asMatt(p, app.url, 'simple');
+  const sid = await asMatt(p, app.url, 'slow-walk');
   await p.waitFor('document.querySelector(".cp-now")', 15000, 'the spine in the chat');
 
   /* the setting Matt actually asked for */
@@ -100,7 +99,7 @@ test('chat spine: Ready advances, I am stuck does not', { timeout: 180000 }, asy
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  await asMatt(p, app.url, 'simple');
+  await asMatt(p, app.url, 'slow-walk');
   await p.waitFor('document.querySelector(".cp-go")', 15000, 'the ready button');
 
   await p.click('.cp-go');
@@ -132,7 +131,7 @@ test('chat spine: switching where the plan lives moves it, both ways', { timeout
   t.after(async () => { await br.close(); await app.close(); });
 
   /* start in a window, like Kyle */
-  await asMatt(p, app.url, 'extreme');
+  await asMatt(p, app.url, 'sprint');
   await p.waitFor('document.querySelector(".plan-now")', 15000, 'the plan window');
   assert.ok((await p.eval('window.__cham.open()')).includes('plan'));
   assert.equal(await p.has('.cp-now'), false, 'not in the chat as well — one home, not two');
@@ -140,10 +139,11 @@ test('chat spine: switching where the plan lives moves it, both ways', { timeout
   /* the primary path: one mode card moves everything, including the plan */
   await p.click('#user-btn');
   await p.waitFor('document.querySelector("body.settings-open")', 8000, 'settings');
-  assert.equal(await p.count('.up-mode'), 3, 'three modes, and nothing else up front');
+  assert.ok(await p.has('#pace'), 'one dial, and nothing else up front');
   assert.equal(await p.eval('document.querySelector(".up-advbody").hidden', false), true,
     'the individual settings start folded away');
-  await p.click('.up-mode[data-mode="simple"]');
+  await p.eval(`(() => { const d = document.getElementById('pace');
+    d.value = 0; d.dispatchEvent(new Event('input')); d.dispatchEvent(new Event('change')); })()`, false);
   await p.waitFor('document.querySelector(".cp-now")', 10000, 'the spine to move into the chat');
   assert.ok(!(await p.eval('window.__cham.open()')).includes('plan'), 'the window should have closed itself');
   // the tile animates out, so give it its exit before declaring it gone

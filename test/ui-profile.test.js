@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 
@@ -12,9 +12,7 @@ async function signIn(p, username, password, mode) {
   await p.fill('#gate-user', username);
   await p.fill('#gate-pass', password);
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-options")', 12000, 'the one question');
-  const at = () => p.eval('[...document.querySelectorAll(".gate-progress i")].findIndex(i => i.classList.contains("on"))', false);
-  await p.click(`.gate-opt[data-v="${mode}"]`);
+  await pickPace(p, mode);
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 10000, 'session');
 }
@@ -25,15 +23,17 @@ test('settings: what the baseline set is visible and changeable afterwards', { t
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  await signIn(p, 'matt', 'OldGuy', 'simple');
+  await signIn(p, 'matt', 'OldGuy', 'slow-walk');
 
   /* One control up front, everything else folded away. Matt: "I love that
      we've got those [settings]. I don't love that we expose them to users." */
   await p.click('#user-btn');
   await p.waitFor('document.querySelector("body.settings-open")', 6000, 'settings panel');
   assert.match(await p.text('.up-head b'), /Matt/);
-  assert.equal(await p.count('.up-mode'), 3, 'three modes and nothing else up front');
-  assert.ok(await p.has('.up-mode[data-mode="simple"].on'), 'the mode they picked is the one shown');
+  assert.ok(await p.has('#pace'), 'one dial, and nothing else up front');
+  assert.equal(await p.count('.up-mode'), 0, 'no row of product choices');
+  assert.equal(await p.eval('document.getElementById("pace").value', false), '0',
+    'the dial sits where they left it');
   assert.equal(await p.eval('document.querySelector(".up-advbody").hidden', false), true,
     'the individual parameters must not be the first thing they see');
   await p.shot(SHOTS + '/settings-matt.png');
@@ -85,7 +85,7 @@ test('settings: behaviour the system has learned is shown back to the learner', 
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  await signIn(p, 'kyle', 'YoungGuy', 'extreme');
+  await signIn(p, 'kyle', 'YoungGuy', 'sprint');
   const sid = await p.eval('window.__cham.sessionId()');
 
   /* enough evidence for the system to have an opinion */
@@ -124,7 +124,7 @@ test('settings: every knob is here, and switching a window off actually removes 
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  await signIn(p, 'kyle', 'YoungGuy', 'balanced');
+  await signIn(p, 'kyle', 'YoungGuy', 'walk');
   await p.click('#user-btn');
   await p.waitFor('document.querySelector("body.settings-open")', 6000, 'settings panel');
   await p.click('.up-adv');
@@ -168,8 +168,8 @@ test('settings: every knob is here, and switching a window off actually removes 
 
   /* and the baseline can be taken again */
   await p.click('.up-retake');
-  await p.waitFor('document.querySelector(".gate-options")', 15000, 'the baseline to come back');
-  assert.equal(await p.count('.gate-opt'), 3, 'and it is one question again, not five');
+  await p.waitFor('document.querySelector("#pace")', 15000, 'the baseline to come back');
+  assert.ok(await p.has('#pace'), 'and it is the dial again, not a questionnaire');
 
   assert.deepEqual(p.errors.filter(e => !/favicon/.test(e)), [], 'no uncaught page errors');
 });

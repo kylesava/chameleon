@@ -58,7 +58,7 @@ if (!process.env.PERSONA) {
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 const PORT = Number(process.env.MATT_PORT || 8931);
@@ -175,7 +175,9 @@ async function signInAsMatt(p) {
   const at = () => p.eval('[...document.querySelectorAll(".gate-progress i")].findIndex(i => i.classList.contains("on"))', false);
   for (const answer of BASELINE) {
     const was = await at();
-    await p.click(`.gate-opt[data-v="${answer}"]`);
+    await p.eval(`(() => { const d = document.getElementById('pace');
+        d.value = ${LEVELS.indexOf(answer)}; d.dispatchEvent(new Event('input')); })()`, false);
+    await p.click('.gate-go');
     await sleep(250);
     // multi-select answers toggle instead of advancing — push them along
     if (await at() === was) { await p.click('.gate-next'); await sleep(250); }

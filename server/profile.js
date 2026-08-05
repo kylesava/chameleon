@@ -23,24 +23,44 @@ const PLAN_PLACES = ['chat', 'window'];
    So a mode is a named bundle of every other setting. The individual settings
    still exist, are still tracked, and are still changeable behind Advanced —
    touching one just means you are no longer on a preset. */
-const MODES = {
-  simple: {
-    label: 'One thing at a time',
+/* A dial, not a set of buttons. Matt's words: "there should be just a slider —
+   how crazy do you want to go. Like, there's slow walk, walk, run, sprint."
+   Ordered, so the UI can render it as one continuous control and moving it is
+   obviously a matter of degree rather than a choice between products. */
+const LEVELS = [
+  {
+    key: 'slow-walk', label: 'Slow walk',
+    sub: 'One thing on screen. It waits for you before every step.',
     parallelism: 1, checkins: 'every-step', planPlace: 'chat',
     voice: 'chat', chatter: 'full', depth: 'balanced', visuals: 'diagrams',
   },
-  balanced: {
-    label: 'A steady pace',
+  {
+    key: 'walk', label: 'Walk',
+    sub: 'Usually one thing, sometimes a second beside it. Checks in at breaks.',
     parallelism: 2, checkins: 'every-stage', planPlace: 'chat',
     voice: 'both', chatter: 'normal', depth: 'balanced', visuals: 'diagrams',
   },
-  extreme: {
-    label: 'Everything at once',
+  {
+    key: 'run', label: 'Run',
+    sub: 'A few things at once, moving without asking. Plan in its own window.',
+    parallelism: 3, checkins: 'rarely', planPlace: 'window',
+    voice: 'windows', chatter: 'minimal', depth: 'balanced', visuals: 'diagrams',
+  },
+  {
+    key: 'sprint', label: 'Sprint',
+    sub: 'Everything it has, side by side, as fast as it can make it.',
     parallelism: 4, checkins: 'rarely', planPlace: 'window',
     voice: 'windows', chatter: 'minimal', depth: 'concise', visuals: 'rich',
   },
-};
-const MODE_KEYS = Object.keys(MODES);
+];
+
+const MODES = Object.fromEntries(LEVELS.map(l => [l.key, l]));
+const MODE_KEYS = LEVELS.map(l => l.key);
+/* Older stored profiles and anything the agent learned before the dial. */
+const MODE_ALIASES = { simple: 'slow-walk', balanced: 'walk', extreme: 'sprint' };
+const resolveMode = k => MODES[k] ? k : (MODE_ALIASES[k] || null);
+const levelOf = k => MODE_KEYS.indexOf(resolveMode(k));
+
 const TUNED = ['parallelism', 'checkins', 'planPlace', 'voice', 'chatter', 'depth', 'visuals'];
 
 /* Which preset a set of settings corresponds to, or 'custom'. Derived rather
@@ -260,6 +280,7 @@ function brief(eff) {
 }
 
 module.exports = {
-  normalise, derive, applySignal, brief, confidenceOf, modeOf, MODES, MODE_KEYS, TUNED,
+  normalise, derive, applySignal, brief, confidenceOf, modeOf,
+  MODES, MODE_KEYS, TUNED, LEVELS, MODE_ALIASES, resolveMode, levelOf,
   PACES, CHECKINS, DEPTHS, MODALITIES, DEFAULT_STATED,
 };

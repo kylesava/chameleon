@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 
@@ -15,8 +15,7 @@ async function seeded(p, url, username, password, mode) {
   await p.fill('#gate-user', username);
   await p.fill('#gate-pass', password);
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-options")', 12000, 'the one question');
-  await p.click(`.gate-opt[data-v="${mode}"]`);
+  await pickPace(p, mode);
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 10000, 'session');
   return p.eval('window.__cham.sessionId()');
@@ -37,7 +36,7 @@ test('plan: the current step is unambiguous and every control works', { timeout:
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  const sid = await seeded(p, app.url, 'matt', 'OldGuy', 'extreme');
+  const sid = await seeded(p, app.url, 'matt', 'OldGuy', 'sprint');
   await p.eval(`fetch('api/test/plan', { method:'POST', headers:{'content-type':'application/json'},
     body: JSON.stringify({ session_id: ${sid}, ...${JSON.stringify(PLAN)} }) }).then(r => r.json())`);
   await p.goto(app.url + `/?session=${sid}`);
@@ -104,7 +103,7 @@ test('plan: an empty plan and a finished plan both read sensibly', { timeout: 12
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  const sid = await seeded(p, app.url, 'kyle', 'YoungGuy', 'extreme');
+  const sid = await seeded(p, app.url, 'kyle', 'YoungGuy', 'sprint');
 
   /* one step, complete it, and the card must not claim there is a next one */
   await p.eval(`fetch('api/test/plan', { method:'POST', headers:{'content-type':'application/json'},
@@ -130,7 +129,7 @@ test('plan: the ready button comes back to life when the agent stops working', {
   const p = await br.page(app.url + '/');
   t.after(async () => { await br.close(); await app.close(); });
 
-  const sid = await seeded(p, app.url, 'matt', 'OldGuy', 'extreme');
+  const sid = await seeded(p, app.url, 'matt', 'OldGuy', 'sprint');
   await p.eval(`fetch('api/test/plan', { method:'POST', headers:{'content-type':'application/json'},
     body: JSON.stringify({ session_id: ${sid}, ...${JSON.stringify(PLAN)} }) }).then(r => r.json())`);
   await p.goto(app.url + `/?session=${sid}`);

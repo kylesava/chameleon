@@ -206,8 +206,9 @@ function makeApi(store) {
       const current = store.getProfile(userId);
       /* A mode is a bundle: setting one writes every parameter it covers, so
          the exposed control and the hidden ones can never disagree. */
-      const fromMode = b.mode && profileModel.MODES[b.mode] ? { ...profileModel.MODES[b.mode] } : {};
-      delete fromMode.label;
+      const resolved = b.mode ? profileModel.resolveMode(b.mode) : null;
+      const fromMode = resolved ? { ...profileModel.MODES[resolved] } : {};
+      delete fromMode.label; delete fromMode.sub; delete fromMode.key;
       const saved = store.saveProfile(userId, {
         ...current,
         onboarded: b.onboarded !== undefined ? !!b.onboarded : current.onboarded,

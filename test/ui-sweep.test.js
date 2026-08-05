@@ -37,7 +37,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 const shot = (p, name) => p.shot(path.join(SHOTS, `sweep-${name}.png`));
@@ -59,15 +59,15 @@ const dump = (label, rows) => {
    These answers deliberately keep the plan in a WINDOW — this sweep is about
    the tiled workspace, and the plan-in-the-conversation variant has its own
    suite in ui-chatplan.test.js. */
-async function signIn(p, user = 'kyle', pass = 'YoungGuy', mode = 'extreme') {
+async function signIn(p, user = 'kyle', pass = 'YoungGuy', mode = 'sprint') {
   await p.waitFor('document.querySelector("#gate-form")', 15000, 'login form');
   await p.fill('#gate-user', user);
   await p.fill('#gate-pass', pass);
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-options") || !document.getElementById("gate")',
-    15000, 'baseline or workspace');
-  // only the first browser sees the question — the profile lives server-side
-  if (await p.has('.gate-options')) await p.click(`.gate-opt[data-v="${mode}"]`);
+  await p.waitFor('document.querySelector("#pace") || !document.getElementById("gate")',
+    15000, 'the dial or the workspace');
+  // only the first browser sees the dial — the profile lives server-side
+  if (await p.has('#pace')) await pickPace(p, mode);
   await p.waitFor('!document.getElementById("gate")', 20000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 15000, 'session');
   return p.eval('window.__cham.sessionId()');

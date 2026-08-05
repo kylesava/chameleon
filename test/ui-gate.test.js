@@ -3,7 +3,7 @@
    pedantic test in the suite. */
 const test = require('node:test');
 const assert = require('node:assert');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const SHOTS = require('node:path').join(__dirname, '..', 'data', 'shots');
 
@@ -29,37 +29,24 @@ test('gate: sign in, answer the baseline, land in the workspace', { timeout: 180
   assert.equal(await p.eval('document.querySelector("#gate-form button").disabled', false), false,
     'the button must re-enable so a mistyped password is recoverable');
 
-  /* ---- the real password gets through to the one question ---- */
+  /* ---- the real password lands you straight in the product ---- */
   await p.fill('#gate-pass', 'OldGuy');
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-options")', 12000, 'the one question');
-
-  /* One question, not five. Everything else is learned from use or said in
-     the chat — asking it up front is friction in front of someone who just
-     wants to start. */
-  assert.equal(await p.count('.gate-opt'), 3, 'three modes, one screen');
-  assert.equal(await p.has('.gate-progress'), false, 'no multi-step questionnaire');
-  assert.match(await p.text('#gate-body h1'), /how much at once/i);
-  /* nothing asks how much they already know — that is per-topic, not per-person */
-  assert.equal(await p.has('.gate-opt[data-v="novice"]'), false);
-  await p.shot(SHOTS + '/gate-q1.png');
-
-  await p.click('.gate-opt[data-v="simple"]');
-
-  /* ---- the gate gets out of the way ---- */
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
   await p.waitFor('getComputedStyle(document.getElementById("shell")).opacity === "1"', 8000, 'workspace visible');
+
+  /* Nothing is asked. Everyone starts at the same sensible pace; the dial is
+     in settings, and the agent learns from use or from being told. */
+  assert.equal(await p.has('#gate'), false, 'no setup screen at all');
+  assert.equal(await p.has('.gate-go'), false, 'nothing to answer before starting');
+  assert.equal(await p.has('.gate-progress'), false);
+  assert.ok(await p.has('#chat-input'), 'straight to the composer');
   await p.shot(SHOTS + '/gate-done.png');
 
-  /* ---- one answer set every parameter ---- */
   const me = await p.eval('fetch("api/me").then(r => r.json())');
   assert.equal(me.user.username, 'matt');
-  assert.equal(me.profile.onboarded, true);
-  assert.equal(me.profile.effective.mode, 'simple');
-  assert.equal(me.profile.effective.maxApps, 1, 'one thing at a time means one window');
-  assert.equal(me.profile.effective.checkinEvery, 'step');
-  assert.equal(me.profile.effective.planPlace, 'chat', 'and the plan in the conversation');
-  assert.equal(me.profile.effective.voice, 'chat', 'and the agent talking in the chat, not inside apps');
+  assert.equal(me.profile.onboarded, true, 'and they are counted as set up');
+  assert.equal(me.profile.effective.mode, 'walk', 'on the middle of the dial');
 
   /* ---- reload must not ask again ---- */
   await p.goto(app.url + '/');
@@ -69,7 +56,7 @@ test('gate: sign in, answer the baseline, land in the workspace', { timeout: 180
   assert.deepEqual(p.errors, [], 'no uncaught page errors');
 });
 
-test('gate: Kyle gets the opposite profile, and users cannot see each other', { timeout: 180000 }, async t => {
+test('gate: the dial still moves everything, and users cannot see each other', { timeout: 180000 }, async t => {
   const app = await serve();
   const br = await open({ headless: true });
   const p = await br.page(app.url + '/');
@@ -79,17 +66,13 @@ test('gate: Kyle gets the opposite profile, and users cannot see each other', { 
   await p.fill('#gate-user', 'kyle');
   await p.fill('#gate-pass', 'YoungGuy');
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-options")', 12000, 'the one question');
-  await p.click('.gate-opt[data-v="extreme"]');
-  await p.waitFor('!document.getElementById("gate")', 15000, 'gate to dismiss');
+  await pickPace(p, 'sprint');
 
-  /* the same single choice, pointed the other way, gives the opposite product */
   const me = await p.eval('fetch("api/me").then(r => r.json())');
-  assert.equal(me.profile.effective.mode, 'extreme');
-  assert.equal(me.profile.effective.maxApps, 4, 'roaming means several windows at once');
+  assert.equal(me.profile.effective.mode, 'sprint');
+  assert.equal(me.profile.effective.maxApps, 4, 'the far end of the dial means several windows');
   assert.equal(me.profile.effective.checkinEvery, 'never');
-  assert.equal(me.profile.effective.planPlace, 'window', 'Kyle keeps the plan beside the work');
-  assert.equal(me.profile.effective.visuals, 'rich');
+  assert.equal(me.profile.effective.planPlace, 'window');
 
   /* Kyle starts a journey; Matt must never see it. */
   const mine = await p.eval(`fetch('api/session', { method:'POST', headers:{'content-type':'application/json'},

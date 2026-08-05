@@ -54,7 +54,7 @@ Exactly one step is live at a time; set it with status "doing". Use set_task_sta
     name: 'remember_preference',
     description: `Record a lasting preference the learner has just expressed about HOW they want to work.
 
-REACH FOR \`mode\` FIRST. Anything broad about pace — "slow down", "too much at once", "give me everything", "take it easy" — is mode=simple|balanced|extreme, which moves every setting together in one call. Use a specific setting only when they named that specific thing. Use this the moment they say something durable — "stop opening two things at once", "put the plan in the chat", "don't ask me every step", "I never want podcasts", "less detail", "talk to me in chat rather than in the windows". Do NOT use it for one-off requests about the current topic ("skip this bit", "go back") — only for how the product should behave from now on.
+REACH FOR \`mode\` FIRST. Anything broad about pace — "slow down", "too much at once", "give me everything", "take it easy" — is a move along one dial: mode=slow-walk|walk|run|sprint, which shifts every setting together in a single call. Nudge one step at a time unless they asked for an extreme. Use a specific setting only when they named that specific thing. Use this the moment they say something durable — "stop opening two things at once", "put the plan in the chat", "don't ask me every step", "I never want podcasts", "less detail", "talk to me in chat rather than in the windows". Do NOT use it for one-off requests about the current topic ("skip this bit", "go back") — only for how the product should behave from now on.
 
 It takes effect immediately and permanently, is reflected in their settings, and you should acknowledge it in one short line. If they say something that maps to no setting here, do not force it — just do as they asked for now.`,
     input_schema: {
@@ -511,10 +511,10 @@ function makeExecutors(ctx) {
       };
       let patch = null;
       if (setting === 'mode') {
-        const preset = profileModel.MODES[raw];
-        if (!preset) return 'Not saved: mode takes simple, balanced or extreme.';
-        patch = { ...preset };
-        delete patch.label;
+        const key = profileModel.resolveMode(raw);
+        if (!key) return `Not saved: mode takes one of ${profileModel.MODE_KEYS.join(', ')}.`;
+        patch = { ...profileModel.MODES[key] };
+        delete patch.label; delete patch.sub; delete patch.key;
       } else if (setting === 'apps') {
         const m = raw.match(/^(lesson|quiz|flashcards|podcast|deck)\s*[:=]\s*(on|off|true|false)$/i);
         if (!m) return 'Not saved: apps takes "lesson:off" or "podcast:on".';

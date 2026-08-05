@@ -6,7 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 
@@ -15,8 +15,7 @@ async function signIn(p) {
   await p.fill('#gate-user', 'kyle');
   await p.fill('#gate-pass', 'YoungGuy');
   await p.click('#gate-form button');
-  await p.waitFor('document.querySelector(".gate-options")', 15000, 'the one question');
-  await p.click('.gate-opt[data-v="extreme"]');
+  await pickPace(p, PACE[3]);
   await p.waitFor('!document.getElementById("gate")', 15000, 'gate');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 12000, 'boot');
 }

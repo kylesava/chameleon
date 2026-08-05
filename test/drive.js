@@ -347,4 +347,18 @@ ${log}`);
   };
 }
 
-module.exports = { open, serve, sleep };
+/* Onboarding no longer asks anything — everyone lands on the same sensible
+   pace. Tests that need a specific one set it the way the settings sheet does
+   and reload, rather than driving a screen that is deliberately gone. */
+const PACE = ['slow-walk', 'walk', 'run', 'sprint'];
+async function pickPace(page, mode = 'walk') {
+  await page.waitFor('!document.getElementById("gate")', 25000, 'the gate to dismiss');
+  await page.waitFor('window.__cham && window.__cham.sessionId()', 15000, 'boot');
+  if (mode === 'walk') return;   // already the default
+  await page.eval(`fetch('api/profile', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ onboarded: true, mode: '${mode}' }) }).then(r => r.json())`);
+  await page.eval('location.reload()', false);
+  await page.waitFor('window.__cham && window.__cham.sessionId()', 20000, 'reload');
+}
+
+module.exports = { open, serve, sleep, PACE, pickPace };

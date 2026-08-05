@@ -30,7 +30,7 @@ if (!process.env.PERSONA) {
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const SHOTS = path.join(__dirname, '..', 'data', 'shots');
 const PORT = 8941;
@@ -164,21 +164,33 @@ async function signIn(p, { baseline = true } = {}) {
   await p.click('#gate-form button');
   if (baseline) {
     await p.waitFor('document.querySelector(".gate-progress")', 25000, 'the baseline');
-    await p.click('.gate-opt[data-v="firehose"]');
+    await p.eval(`(() => { const d = document.getElementById('pace');
+    d.value = 1; d.dispatchEvent(new Event('input')); })()`, false);
+  await p.click('.gate-go');
     await p.waitFor('document.querySelector(".gate-progress i:nth-child(2).on")', 8000, 'question 2');
-    await p.click('.gate-opt[data-v="rarely"]');
+    await p.eval(`(() => { const d = document.getElementById('pace');
+    d.value = 1; d.dispatchEvent(new Event('input')); })()`, false);
+  await p.click('.gate-go');
     await p.waitFor('document.querySelector(".gate-progress i:nth-child(3).on")', 8000, 'question 3');
-    await p.click('.gate-opt[data-v="concise"]');
+    await p.eval(`(() => { const d = document.getElementById('pace');
+    d.value = 1; d.dispatchEvent(new Event('input')); })()`, false);
+  await p.click('.gate-go');
     await p.waitFor('document.querySelector(".gate-progress i:nth-child(4).on")', 8000, 'question 4');
-    await p.click('.gate-opt[data-v="practice"]');
+    await p.eval(`(() => { const d = document.getElementById('pace');
+    d.value = 1; d.dispatchEvent(new Event('input')); })()`, false);
+  await p.click('.gate-go');
     await sleep(150);
-    await p.click('.gate-opt[data-v="diagrams"]');
+    await p.eval(`(() => { const d = document.getElementById('pace');
+    d.value = 1; d.dispatchEvent(new Event('input')); })()`, false);
+  await p.click('.gate-go');
     await sleep(150);
     assert.equal(await p.count('.gate-opt.on'), 2, 'both modalities should stay lit');
     assert.ok(await p.has('.gate-progress i:nth-child(4).on'), 'multi-select must not auto-advance');
     await p.click('.gate-next');
     await p.waitFor('document.querySelector(".gate-progress i:nth-child(5).on")', 8000, 'question 5');
-    await p.click('.gate-opt[data-v="strong"]');
+    await p.eval(`(() => { const d = document.getElementById('pace');
+    d.value = 1; d.dispatchEvent(new Event('input')); })()`, false);
+  await p.click('.gate-go');
   }
   await p.waitFor('!document.getElementById("gate")', 25000, 'gate to dismiss');
   await p.waitFor('window.__cham && window.__cham.sessionId()', 20000, 'session');

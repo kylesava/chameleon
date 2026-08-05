@@ -8,7 +8,7 @@ if (!process.env.PERSONA) {
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { open, serve, sleep } = require('./drive.js');
+const { open, serve, sleep, PACE, pickPace } = require('./drive.js');
 
 const idle = p => p.waitFor('!document.body.classList.contains("busy")', 300000, 'the agent to finish');
 
@@ -25,7 +25,9 @@ test('coaching: what you ask for in chat becomes a setting and stays one', { tim
   await p.waitFor('document.querySelector(".gate-progress")', 15000);
   /* start as the opposite of everything we are about to ask for, so any change
      is unambiguous rather than a lucky default */
-  for (const a of ['all', 'rarely', 'window', 'chat', 'rich']) { await p.click(`.gate-opt[data-v="${a}"]`); await sleep(340); }
+  for (const a of ['all', 'rarely', 'window', 'chat', 'rich']) { await p.eval(`(() => { const d = document.getElementById('pace');
+        d.value = ${LEVELS.indexOf(a)}; d.dispatchEvent(new Event('input')); })()`, false);
+    await p.click('.gate-go'); await sleep(340); }
   await p.waitFor('!document.getElementById("gate")', 20000);
   await p.waitFor('window.__cham && window.__cham.sessionId()', 12000);
 
