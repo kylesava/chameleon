@@ -18,6 +18,12 @@ It does **one thing at a time**, narrates inside the app window it's working
 in, and the chat history steps aside while it works. Those rules are the
 product; they're written down in [CLAUDE.md](CLAUDE.md).
 
+**How much it does at once is a property of you, not of the product.** A short
+baseline runs the first time you sign in, and from then on Chameleon keeps one
+window open and waits for you, or opens four and never interrupts — whichever
+you actually are. It keeps watching and adjusts. See
+[docs/ADAPTIVE.md](docs/ADAPTIVE.md).
+
 ## Run it
 
 ```bash
@@ -38,8 +44,39 @@ node server.js
 | `CHAMELEON_EFFORT` | API default | `low`…`max` |
 | `PORT` | `8787` | |
 | `ELEVENLABS_VOICE_A` / `_B` | Rachel / Adam | podcast host voices |
+| `AUTH_SECRET` | random per boot | set it, or every restart signs everyone out |
+| `MATT_PASSWORD` / `KYLE_PASSWORD` | the seeded demo values | the two accounts created on first boot |
+| `GEMINI_API_KEY` | — | optional; generated illustrations in lessons |
+| `LOG_TOKEN` | random per boot | gates `/api/log`, the audit trail |
 
-Tests: `node --test "test/*.test.js"` and `node test/solver.test.js`.
+### Signing in
+
+Two accounts are seeded on first boot: **matt** and **kyle**. Each gets their
+own journeys, their own profile, and sees nothing of the other's. First sign-in
+runs a five-question baseline — every question is a concrete situation, not a
+setting — and everything it decides is changeable afterwards from the avatar in
+the top right, or just by saying so in the chat.
+
+The two founders want opposite products from the same build, and both get it:
+Matt keeps the plan in the conversation with one window at a time and a
+confirmation before each step; Kyle keeps the plan in its own window with a
+lesson and a quiz beside it and no interruptions.
+
+`node tools/reset-demo.js` puts both accounts back to a never-seen-it state —
+worth running before a demo, since completing the baseline is exactly what a
+test run does.
+
+### Tests
+
+```bash
+node --test "test/*.test.js"
+```
+
+The `ui-*.test.js` files drive a **real headless Chrome** through
+`test/drive.js`, a zero-dependency CDP client — real mouse events, so
+z-index and pointer-events bugs cannot hide. Each test gets its own port and a
+throwaway database. `test/persona-*.test.js` run whole journeys against the
+live API and cost real tokens.
 
 ## The apps
 

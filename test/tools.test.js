@@ -38,7 +38,7 @@ test('applyLayoutActions: open/resize/close/close_all + junk ignored', () => {
 
 test('update_plan persists, emits, and opens the plan tile', () => {
   const { executors, store, session, events } = ctx();
-  const out = executors.update_plan({ title: 'Learn X', tasks: [{ title: 'a' }, { title: 'b', stage: 1 }] });
+  const out = executors.update_plan({ title: 'Learn X', tasks: [{ title: 'a', done_when: 'x' }, { title: 'b', done_when: 'y', stage: 1 }] });
   assert.match(out, /Plan saved/);
   assert.match(out, /#\d+/); // ids surfaced so the model can set statuses later
   assert.equal(store.getPlan(session.id).tasks.length, 2);
@@ -48,7 +48,7 @@ test('update_plan persists, emits, and opens the plan tile', () => {
 
 test('set_task_status updates and re-emits the plan', () => {
   const { executors, store, session, events } = ctx();
-  executors.update_plan({ title: 'p', tasks: [{ title: 'a' }] });
+  executors.update_plan({ title: 'p', tasks: [{ title: 'a', done_when: 'x' }] });
   const id = store.getPlan(session.id).tasks[0].id;
   events.length = 0;
   const out = executors.set_task_status({ tasks: [{ id, status: 'done' }] });

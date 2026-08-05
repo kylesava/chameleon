@@ -30,6 +30,11 @@
   const urlPlace = new URLSearchParams(location.search).get('place');
   let place = urlPlace || localStorage.getItem('cham_place') || 'center';
   let collapsed = localStorage.getItem('cham_collapsed') === '1';
+  /* A transient tuck, distinct from the stored preference: once there is a
+     workspace to look at, the centred history stops blanketing it. The teaching
+     lives in the app windows now, so the transcript should not be sitting on
+     top of them. One click brings it back, and that choice sticks. */
+  let tucked = false;
   let onPlaceChange = () => {};
 
   function applyPlace(p, opts = {}) {
@@ -44,15 +49,26 @@
 
   function syncCollapse() {
     // minimised implies hidden history; otherwise honour the user's toggle
-    document.body.classList.toggle('chat-collapsed', collapsed || place === 'mini');
-    collapseBtn.title = collapsed ? 'Show the conversation' : 'Hide the conversation';
-    collapseBtn.setAttribute('aria-expanded', String(!collapsed));
+    const hidden = collapsed || tucked || place === 'mini';
+    document.body.classList.toggle('chat-collapsed', hidden);
+    collapseBtn.title = hidden ? 'Show the conversation' : 'Hide the conversation';
+    collapseBtn.setAttribute('aria-expanded', String(!hidden));
   }
   function setCollapsed(v) {
     collapsed = v;
+    tucked = false;                 // an explicit choice outranks the auto-tuck
     localStorage.setItem('cham_collapsed', v ? '1' : '0');
     syncCollapse();
     if (!v) scroll();
+  }
+  /* Called when a turn settles: fold the transcript away if there is now
+     something in the workspace worth the space. */
+  function tuck(hasWorkspace) {
+    syncFused();                    // the hero may have just been dismissed
+    const want = !!hasWorkspace && place === 'center' && !collapsed;
+    if (want === tucked) return;
+    tucked = want;
+    syncCollapse();
   }
 
   collapseBtn.addEventListener('click', e => { e.preventDefault(); setCollapsed(!collapsed); });
@@ -169,7 +185,10 @@
     scroll();
   }
 
-  function renderHistory(messages) {
+  /* `hasWorkspace` matters as much as the message count: coming back to a
+     journey that already has windows open must not greet you with the
+     full-screen hero sitting on top of them. */
+  function renderHistory(messages, hasWorkspace) {
     log.innerHTML = '';
     for (const m of messages) {
       if (m.kind === 'narration') addNarration(m.app, m.content);
@@ -179,7 +198,7 @@
       else addAgent(m.content);
     }
     document.body.classList.toggle('has-msgs', messages.length > 0);
-    document.body.classList.toggle('chat-center', messages.length === 0);
+    document.body.classList.toggle('chat-center', messages.length === 0 && !hasWorkspace);
     syncFused();
     scroll();
   }
@@ -313,10 +332,21 @@
     send,
     sendEvent: (desc, label, icon) => send(`[UI EVENT] The user ${desc}`, 'event', { label, icon }),
     renderHistory, addAgent, addUser, addChip, addNarration, addError,
-    turnSettled, stop, setStatus,
+    turnSettled, stop, setStatus, tuck,
+    /* The spine has appeared in the conversation — make sure the surface it
+       lives on is a card and not the full-screen hero. */
+    showPlan() {
+      document.body.classList.remove('chat-center');
+      document.body.classList.add('has-msgs');
+      syncFused();
+    },
     place: () => place,
     applyPlace,
     isBusy: () => document.body.classList.contains('busy'),
+    /* True while the turn's SSE stream is still open. The action queue empties
+       constantly mid-turn — events arrive slower than they play — so "queue is
+       empty" must never be mistaken for "the agent has finished". */
+    streaming: () => !!abortCtl,
     fillInput: t => { input.value = t; input.focus(); },
   };
   applyPlace(place, { transient: !!urlPlace });

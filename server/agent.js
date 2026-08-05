@@ -5,6 +5,7 @@
 const { ENV } = require('./env.js');
 const { buildTools, makeExecutors, DRAFTABLE, TOOL_STATUS, draftScan } = require('./tools.js');
 const audit = require('./log.js');
+const profileModel = require('./profile.js');
 
 const API_KEY = ENV.ANTHROPIC_API_KEY;
 const MODEL = ENV.CHAMELEON_MODEL || 'claude-opus-5';
@@ -25,7 +26,15 @@ PRODUCT PRINCIPLES (non-negotiable):
 
 NEVER show the learner anything internal. No task ids ("task #54"), no artifact ids, no tool names, no section numbers you invented. Refer to goals and content by their words — "back to the multiply-don't-add idea", not "#54". Ids exist so you can address things in tool calls; they are invisible plumbing to them.
 
-THE PLAN IS SHARED PROGRESS, NOT A TO-DO LIST YOU HAND OVER. You drive it: as you teach a goal, mark it "doing" (set_task_status) BEFORE you build the thing that serves it, and mark it "done" once the learner has actually shown it stuck — not merely been shown it. Exactly one task should be "doing" at a time; that is the "now" marker the learner steers by. Never park the plan waiting for them to tick a box; ticking is their override, not your trigger.
+THE PLAN IS THE SPINE, AND YOU WORK ONE STEP OF IT AT A TIME.
+- Exactly one step is live ("doing"). Everything you open serves THAT step and nothing else. Do not set up the next step's material "while they're here" — that is the single fastest way to overwhelm someone.
+- A step is finished when its done_when is actually demonstrated, not when the material has been shown. Call complete_step then, and only then.
+- Their settings below say whether to check in before moving on. When they do: set the step up, tell them what to do, and STOP. Ending your turn to let someone work is correct behaviour, not failure. Do not fill the silence with the next thing.
+- When they say they're ready (or press Continue), advance and set up the next step the same way.
+- A quiz next to a lesson is TWO things unless the step itself is "read this, then check yourself". Be honest about which it is.
+
+THEY CAN COACH YOU, AND IT MUST STICK. When the learner tells you how they want the product to behave — "stop opening two things at once", "put the plan in the chat", "don't ask me every step", "I never want podcasts", "talk to me in chat rather than annotating things", "less detail", "more diagrams" — call remember_preference IMMEDIATELY, then acknowledge it in one short line and carry on. Do not promise to remember; the tool is how you remember. Do not ask them to go and find a settings screen. A preference they have to repeat is a preference you failed to record.
+Read the difference: "skip this bit" is about today's topic and needs no tool; "stop showing me two things at once" is about the product and does. When in doubt and it sounds durable, record it — it is one click for them to change back.
 
 THE SPINE: GOALS. Every journey runs on a lesson plan (update_plan) — a visible checklist the learner works through and checks off. Create one as soon as you understand the goal (2-3 stages, 3-8 tasks). When the learner checks a task, answers a quiz, or asks for something new, update task statuses and adapt: advance the plan, revise the lesson, add practice. The plan is a living object, not a formality.
 
@@ -228,13 +237,22 @@ async function runTurn(opts) {
   // content stays written for the model
   store.addMessage(sessionId, 'user', userContent, kind || 'chat', kind === 'event' ? (opts.label || null) : null);
 
-  const executors = makeExecutors({ store, sessionId, emit, layout: opts.layout });
+  const eff = opts.effective || { maxApps: 4, checkinEvery: 'stage', depth: 'balanced', priorKnowledge: 'some', preferredApps: [], confidence: 0, accuracy: null, modality: {} };
+  const executors = makeExecutors({
+    store, sessionId, emit, layout: opts.layout,
+    maxApps: eff.maxApps,
+    allowedApps: eff.allowedApps,
+    planPlace: eff.planPlace,
+    setPreference: opts.setPreference,
+    onStepComplete: opts.onStepComplete,
+  });
   const msgs = historyMessages(store, sessionId);
   const digest = stateDigest(store, sessionId, opts.layout.get());
   msgs[msgs.length - 1] = {
     role: 'user',
     content: msgs[msgs.length - 1].content + `\n\n[session state]\n${digest}`,
   };
+  const systemText = `${SYSTEM}\n\n${profileModel.brief(eff)}`;
 
   const replyParts = [];
   let iterations = 0;
@@ -247,7 +265,11 @@ async function runTurn(opts) {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       stream: true,
-      system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
+      // the stable core is cached; the per-learner block rides after it
+      system: [
+        { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: systemText.slice(SYSTEM.length) },
+      ],
       tools: buildTools(), // rebuilt per turn: capabilities can drop out at runtime
       messages: msgs,
       // summarised reasoning drives the live status line while the model works

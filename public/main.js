@@ -25,6 +25,8 @@
     draft: null,       // { app, field, items } — content streaming in right now
     status: {},        // app id -> ephemeral "what I'm doing" line (never chat history)
     narration: {},     // app id -> what the agent last said inside that window
+    profile: null,     // effective settings for this learner
+    user: null,
   };
   const tiles = new Map();
 
@@ -57,9 +59,30 @@
     return j;
   };
 
+  /* How this person actually works, as opposed to what they said in the
+     baseline. Fire-and-forget: a dropped signal must never cost the learner
+     anything, so failures are swallowed and never retried. */
+  const signalled = new Set();
+  function signal(kind, detail, value) {
+    if (!state.sessionId) return;
+    // "they use quizzes" only needs saying once per window per journey
+    if (kind === 'app_used') {
+      const key = `${kind}:${detail}`;
+      if (signalled.has(key)) return;
+      signalled.add(key);
+    }
+    api('api/signal', { session_id: state.sessionId, kind, detail: detail || '', value })
+      .then(r => { if (r && r.profile && r.profile.effective) state.profile = r.profile.effective; })
+      .catch(() => {});
+  }
+
   /* ---------------- boot ---------------- */
+  await Gate.ready();                       // sign-in and baseline come first
+  document.body.classList.remove('booting');
   const params = new URLSearchParams(location.search);
   const boot = await api('api/state' + (params.has('session') ? `?session=${params.get('session')}` : ''));
+  state.profile = (boot.profile && boot.profile.effective) || { maxApps: 4, checkinEvery: 'stage', depth: 'balanced' };
+  state.user = boot.user || null;
   state.sessionId = boot.session.id;
   state.plan = boot.plan;
   state.sources = boot.sources;
@@ -82,10 +105,12 @@
     sessionId: () => state.sessionId,
     draftFor: app => (state.draft && state.draft.app === app ? state.draft : null),
     statusFor: app => state.status[app] || null,
+    isBusy: () => document.body.classList.contains('busy'),
     api,
     sourceAdded: src => { state.sources.push(src); dirty('sources'); },
     sourceRemoved: id => { state.sources = state.sources.filter(s => s.id !== id); dirty('sources'); },
-    planChanged: plan => { state.plan = plan; dirty('plan'); },
+    planChanged: plan => { state.plan = plan; paintPlan(); },
+    planResized: () => relayout(),
   });
 
   Chat.configure({
@@ -94,8 +119,6 @@
     onTurnDone: () => { enqueue({ t: '_end' }); },
     onPlaceChange: () => relayout(), // the canvas reclaims/yields the docked column
   });
-  Chat.renderHistory(boot.messages); // also owns the chat-center / fused classes
-
   /* ---------------- session switcher ---------------- */
   const sessBtn = document.getElementById('sess-btn');
   const sessPop = document.getElementById('sess-pop');
@@ -128,7 +151,214 @@
   document.addEventListener('click', e => {
     if (!e.target.closest('#sessmenu')) document.getElementById('sessmenu').classList.remove('open');
     if (!e.target.closest('#appsmenu')) document.getElementById('appsmenu').classList.remove('open');
+    if (!e.target.closest('#usermenu') && !e.target.closest('#user-pop')) closeSettings();
   });
+  /* Escape closes whatever is open — a popover you can only dismiss by clicking
+     elsewhere is a trap for anyone working from the keyboard. */
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.body.classList.contains('settings-open')) { closeSettings(); userBtn.focus(); return; }
+    const open = document.querySelector('#sessmenu.open, #appsmenu.open');
+    if (!open) return;
+    open.classList.remove('open');
+    const btn = open.querySelector('button');
+    if (btn) btn.focus();
+  });
+
+  /* ---------------- how you like to work ----------------
+     The baseline is asked once; this is where it stays changeable. It also
+     shows what Chameleon has since concluded from watching, because a system
+     that quietly adapts to you should be willing to say what it has decided. */
+  const userBtn = document.getElementById('user-btn');
+  const userPop = document.getElementById('user-pop');
+  const scrim = document.createElement('div');
+  scrim.id = 'user-scrim';
+  document.body.appendChild(scrim);
+  const closeSettings = () => document.body.classList.remove('settings-open');
+  scrim.onclick = closeSettings;
+  /* Changing a setting repaints the sheet, which detaches the node that was
+     clicked — so by the time the document-level "clicked outside?" handler
+     runs, e.target has no ancestors and the sheet closes itself. Stop the
+     click here instead of asking where it came from afterwards. */
+  userPop.addEventListener('click', e => e.stopPropagation());
+  let stated = (boot.profile && boot.profile.stated) || {};
+  document.getElementById('user-initial').textContent =
+    ((state.user && state.user.display_name) || '?').trim().charAt(0).toUpperCase();
+  userBtn.title = state.user ? `${state.user.display_name} — how you like to work` : 'How you like to work';
+
+  /* Everything that changes how Chameleon behaves, in one place, grouped the
+     way a person thinks about it rather than the way the profile stores it. */
+  const SETTINGS = [
+    { group: 'Pacing' },
+    {
+      key: 'parallelism', label: 'Windows at once',
+      options: [[1, 'One'], [2, 'Two'], [3, 'Three'], [4, 'Four']],
+      note: 'A hard ceiling — the agent is refused if it tries to open more.',
+    },
+    {
+      key: 'checkins', label: 'Wait for me',
+      options: [['every-step', 'Every step'], ['every-stage', 'At breaks'], ['rarely', 'Never']],
+      note: 'Whether it stops for you before starting the next step.',
+    },
+
+    {
+      key: 'planPlace', label: 'The plan lives',
+      options: [['chat', 'In the conversation'], ['window', 'In its own window']],
+      note: 'In the conversation you talk to it about the plan; in a window it sits beside the work.',
+    },
+
+    { group: 'Where it talks' },
+    {
+      key: 'voice', label: 'Chameleon speaks',
+      options: [['windows', 'In the windows'], ['both', 'Both'], ['chat', 'In chat']],
+      note: 'Beside the thing being taught, or as a conversation.',
+    },
+    {
+      key: 'chatter', label: 'Chat replies',
+      options: [['minimal', 'Barely'], ['normal', 'Normal'], ['full', 'Full']],
+    },
+
+    { group: 'How it teaches' },
+    {
+      key: 'depth', label: 'Detail',
+      options: [['concise', 'Tight'], ['balanced', 'Solid'], ['thorough', 'Deep']],
+    },
+    {
+      key: 'visuals', label: 'Diagrams & pictures',
+      options: [['plain', 'Words'], ['diagrams', 'Some'], ['rich', 'Lots']],
+    },
+    {
+      key: 'priorKnowledge', label: 'Assume I know',
+      options: [['novice', 'Nothing'], ['some', 'Some'], ['strong', 'A lot']],
+    },
+
+    { group: 'What it can build', apps: true },
+  ];
+
+  const APP_TOGGLES = ['lesson', 'quiz', 'flashcards', 'podcast', 'deck'];
+
+  function renderUserPop() {
+    const eff = state.profile || {};
+    const learned = [];
+    if (eff.stepsSeen) learned.push(`${eff.stepsSeen} step${eff.stepsSeen === 1 ? '' : 's'} watched`);
+    if (eff.accuracy !== null && eff.accuracy !== undefined) learned.push(`${Math.round(eff.accuracy * 100)}% on quizzes`);
+    if (eff.preferredApps && eff.preferredApps.length) {
+      const names = eff.preferredApps.map(a => ((Apps.REGISTRY[a] || {}).name || a).toLowerCase());
+      learned.push(`you reach for ${names.join(', ')}`);
+    }
+    if (eff.confidence >= 0.99) learned.push('now following what you do over what you ticked');
+
+    const apps = stated.apps || {};
+    /* Every change repaints the whole sheet, so without this, adjusting a
+       setting near the bottom throws you back to the top of the list. */
+    const keepScroll = (userPop.querySelector('.up-scroll') || {}).scrollTop || 0;
+    userPop.innerHTML = `
+      <div class="up-head">
+        <b>${Apps.esc((state.user && state.user.display_name) || 'You')}</b>
+        <span>how you like to work</span>
+      </div>
+      <div class="up-body"><div class="up-scroll">
+      ${SETTINGS.map(sec => {
+    if (sec.apps) {
+      return `<div class="up-group">${sec.group}</div>
+          <div class="up-apps">${APP_TOGGLES.map(a => {
+    const on = apps[a] !== false;
+    return `<button class="up-app ${on ? 'on' : ''}" data-app="${a}" aria-pressed="${on}">
+              ${Apps.icon(a)}<span>${Apps.esc((Apps.REGISTRY[a] || {}).name || a)}</span></button>`;
+  }).join('')}</div>
+          <span class="up-note">Switched off means never built and never offered.</span>`;
+    }
+    if (sec.group) return `<div class="up-group">${sec.group}</div>`;
+    return `<div class="up-row" data-k="${sec.key}">
+          <em>${sec.label}</em>
+          <div class="up-opts">${sec.options.map(([v, label]) =>
+    `<button data-v="${v}" class="${String(stated[sec.key]) === String(v) ? 'on' : ''}">${label}</button>`).join('')}</div>
+          ${sec.note ? `<span class="up-note">${sec.note}</span>` : ''}
+        </div>`;
+  }).join('')}
+      ${learned.length ? `<div class="up-learned"><em>learned so far</em><span>${Apps.esc(learned.join(' · '))}</span></div>` : ''}
+      </div></div>
+      <div class="up-foot">
+        <button class="up-retake">Retake the baseline</button>
+        <button class="up-out">Sign out</button>
+      </div>`;
+
+    const sc = userPop.querySelector('.up-scroll');
+    if (sc && keepScroll) sc.scrollTop = keepScroll;
+
+    /* Every control saves on click and reconciles with whatever the server
+       actually stored — the panel never becomes the source of truth. */
+    const save = async patch => {
+      stated = { ...stated, ...patch };
+      /* Some settings change the shape of the workspace, not just the model's
+         brief — moving the plan between the chat and a window is the obvious
+         one, and it has to happen as they click, not on the next reload. */
+      Object.assign(state.profile, patch);
+      renderUserPop();
+      paintPlan();
+      try {
+        const r = await api('api/profile', { stated: patch });
+        if (r.profile) {
+          stated = r.profile.stated;
+          state.profile = r.profile.effective;
+          renderUserPop();
+          paintPlan();
+        }
+      } catch { /* the next open re-reads the truth from the server */ }
+    };
+
+    userPop.querySelectorAll('.up-opts button').forEach(b => b.onclick = () => {
+      const key = b.closest('.up-row').dataset.k;
+      save({ [key]: key === 'parallelism' ? Number(b.dataset.v) : b.dataset.v });
+    });
+    userPop.querySelectorAll('.up-app').forEach(b => b.onclick = () => {
+      const a = b.dataset.app;
+      const next = { ...(stated.apps || {}), [a]: (stated.apps || {})[a] === false };
+      // never let them switch everything off and leave the agent nothing to do
+      if (!APP_TOGGLES.some(x => next[x] !== false)) return Apps.toast('Leave at least one window on.');
+      save({ apps: next });
+    });
+    userPop.querySelector('.up-retake').onclick = async () => {
+      try { await api('api/profile', { onboarded: false }); } catch {}
+      location.reload();
+    };
+    userPop.querySelector('.up-out').onclick = async () => {
+      try { await api('api/logout', {}); } catch {}
+      location.replace(location.pathname);
+    };
+  }
+  renderUserPop();
+  userBtn.onclick = e => {
+    e.stopPropagation();
+    renderUserPop();
+    document.body.classList.toggle('settings-open');
+  };
+
+  /* ---------------- the spine ----------------
+     One plan, two homes. Matt keeps it in the conversation so he can talk to
+     it; Kyle keeps it in a window beside the lesson and the quiz. Which one is
+     a setting, so neither has to live with the other's preference. */
+  const chatPlanEl = document.getElementById('chat-plan');
+  const planInChat = () => (state.profile || {}).planPlace === 'chat';
+
+  function paintPlan() {
+    document.body.classList.toggle('plan-in-chat', planInChat());
+    if (planInChat()) {
+      if (findApp('plan')) { closeApp('plan'); relayout(); }
+      Apps.chatPlan(chatPlanEl);
+      // the spine appearing must not be hidden behind a collapsed transcript
+      if (state.plan && state.plan.tasks.length) Chat.showPlan();
+    } else {
+      chatPlanEl.hidden = true;
+      chatPlanEl.innerHTML = '';
+      // moving it back out of the chat has to actually put a window there
+      if (state.plan && state.plan.tasks.length && !findApp('plan')) {
+        openApp('plan', 'm', true);
+        relayout();
+        persistLayout();
+      } else dirty('plan');
+    }
+  }
 
   /* ---------------- workspace state ops ---------------- */
   const findApp = id => state.apps.find(a => a.id === id);
@@ -138,7 +368,7 @@
     let app = findApp(id);
     if (app) { if (size) app.size = size; }
     else {
-      app = { id, size: size || 'm', focus: false, openedAt: ++state.counter, ui: null };
+      app = { id, size: size || 'm', focus: false, openedAt: ++state.counter, shownAt: Date.now(), ui: null };
       state.apps.push(app);
     }
     if (focus) setFocus(id);
@@ -170,13 +400,28 @@
       if (l.custom) { app.custom = l.custom; app.userSized = !!l.userSized; }
     }
   }
+  /* Coming back to a journey that has a plan and no saved layout — the plan is
+     where you left off, so it is what you should land on. Unless it lives in
+     the conversation, in which case there is no window to open. */
+  if (state.plan && state.plan.tasks.length && !(boot.session.layout || []).length
+      && (boot.profile && boot.profile.effective || {}).planPlace !== 'chat') openApp('plan', 'm', true);
+
+  /* After the workspace is known, not before: the full-screen hero is only
+     right when there is genuinely nothing to come back to. */
+  Chat.renderHistory(boot.messages, state.apps.length > 0); // also owns the chat-center / fused classes
 
   /* ---------------- the one-at-a-time action queue ---------------- */
   const queue = [];
   let playing = false;
   let fast = false;
 
+  /* A rolling trace of everything the server told this browser to do. When a
+     turn "does nothing", this is what distinguishes "the event never arrived"
+     from "the event arrived and the client dropped it". */
+  const trace = [];
   function enqueue(ev) {
+    trace.push({ t: ev.t, a: ev.a ? `${ev.a.type}:${ev.a.app || ''}` : (ev.app || undefined) });
+    if (trace.length > 300) trace.shift();
     /* Commandment 7: showing what's happening RIGHT NOW never waits in line
        behind the pacing queue — these are a live view of the current step,
        not a new step competing for attention. */
@@ -203,6 +448,11 @@
     if (!ev.app) return;
     state.draft = { app: ev.app, field: ev.field || null, items: [] };
     document.body.classList.add('acting');
+    /* When the spine lives in the conversation there is no tile to open — the
+       plan writes itself into the chat surface instead. Opening one anyway put
+       a plan window on screen for exactly the learner who asked never to have
+       one. */
+    if (ev.app === 'plan' && planInChat()) { Chat.showPlan(); paintPlan(); return; }
     // open the tile FIRST so the content has somewhere visible to land
     applyAction({ type: 'open', app: ev.app, size: ev.size || 'm', focus: true });
   }
@@ -212,6 +462,11 @@
   let draftRaf = 0;
   function applyDraft(ev) {
     state.draft = { app: ev.app, field: ev.field, head: ev.head || {}, items: ev.items || [] };
+    if (ev.app === 'plan' && planInChat()) {
+      cancelAnimationFrame(draftRaf);
+      draftRaf = requestAnimationFrame(() => paintPlan());
+      return;
+    }
     const app = findApp(ev.app);
     if (!app) return;
     app.ui = null;
@@ -263,9 +518,13 @@
       report('playQueue', e);
     } finally {
       playing = false;
-      // whatever happened, never leave the composer stuck mid-turn
-      if (!queue.length && document.body.classList.contains('busy')) {
+      /* A safety net for a queue that died, not a turn-end detector. The queue
+         runs dry many times during a normal turn — settling here while the
+         stream is still open would retire the stop control, bring the history
+         back, and tell the learner it had finished while it was still working. */
+      if (!queue.length && document.body.classList.contains('busy') && !Chat.streaming()) {
         document.body.classList.remove('acting');
+        Chat.tuck(state.apps.length > 0);
         Chat.turnSettled();
       }
     }
@@ -279,7 +538,12 @@
         state.draft = null;
         clearStatus();
         document.body.classList.remove('acting');
+        Chat.tuck(state.apps.length > 0);
         Chat.turnSettled();
+        /* The step card disables "I'm ready" while the agent is working. It has
+           to be redrawn once that stops, or the one button the learner is meant
+           to press stays dead until something else happens to repaint it. */
+        paintPlan();
         continue;
       }
       document.body.classList.add('acting'); // history yields to the workspace
@@ -300,6 +564,23 @@
   function playStep(ev) {
     switch (ev.t) {
       case 'action': applyAction(ev.a); break;
+      /* The learner coached the product from the chat and the agent recorded
+         it. Apply it now so the change is visible in the same breath as the
+         acknowledgement, rather than on the next reload. */
+      case 'preference': {
+        Object.assign(state.profile, ev.patch || {});
+        if (ev.patch && ev.patch.parallelism) state.profile.maxApps = ev.patch.parallelism;
+        stated = { ...stated, ...(ev.patch || {}) };
+        if (ev.patch && ev.patch.apps) stated.apps = { ...(stated.apps || {}), ...ev.patch.apps };
+        renderUserPop();
+        paintPlan();
+        Apps.toast('Got it — saved to your settings.', 'good');
+        api('api/me').then(r => {
+          if (r && r.profile) { state.profile = r.profile.effective; stated = r.profile.stated; renderUserPop(); paintPlan(); }
+        }).catch(() => {});
+        break;
+      }
+
       case 'narrate': {
         Chat.addNarration(ev.app, ev.text);
         narrateInTile(ev.app, ev.text);
@@ -310,7 +591,7 @@
         if (state.draft && state.draft.app === 'plan') state.draft = null;
         delete state.status.plan;
         paintStatus('plan');
-        dirty('plan');
+        paintPlan();
         break;
       }
       case 'artifact': {
@@ -435,7 +716,7 @@
 
   /* ---------------- layout + tile DOM (carried from the POC) ---------------- */
   const DOCK_W = 400; // keep in sync with --dock-side-w in style.css
-  const MINI_H = 60;  // the minimised pill's footprint (see body.place-mini)
+  const MINI_H = 96;  // the minimised pill's real footprint (see body.place-mini)
   function metrics() {
     const r = stage.getBoundingClientRect();
     const centered = document.body.classList.contains('chat-center');
@@ -445,7 +726,14 @@
     if (!centered) {
       // a side dock takes its own column; the centre dock reserves a bottom strip
       if (place === 'left' || place === 'right') width -= DOCK_W + 12;
-      else if (place !== 'mini') height -= 92;
+      /* The centred card floats over the canvas, and it is no longer a fixed
+         height — with the plan living inside it, it grows with the plan. Measure
+         it rather than guessing, so a tile is never drawn underneath it. */
+      else if (place !== 'mini') {
+        const dockEl = document.getElementById('chatdock');
+        const h = dockEl ? dockEl.getBoundingClientRect().height : 0;
+        height -= Math.max(132, Math.min(Math.round(h) + 18, Math.round(r.height * 0.62)));
+      }
       else height -= MINI_H;
     }
     return {
@@ -758,7 +1046,15 @@
       </div>
       <div class="tile-body"></div>`;
     const body = el.querySelector('.tile-body');
-    el.querySelector('[data-a=close]').onclick = () => { closeApp(app.id); relayout(); persistLayout(); };
+    el.querySelector('[data-a=close]').onclick = () => {
+      const a = findApp(app.id);
+      if (a && a.shownAt && Date.now() - a.shownAt < 15000 && app.id !== 'plan') {
+        signal('tile_closed_fast', app.id);
+      }
+      closeApp(app.id);
+      relayout();
+      persistLayout();
+    };
     el.querySelector('.tile-head').ondblclick = e => {
       if (e.target.closest('.tbtn')) return;
       const a = findApp(app.id);
@@ -766,6 +1062,7 @@
     };
     el.addEventListener('mousedown', e => {
       setFocus(app.id);
+      if (app.id !== 'plan') signal('app_used', app.id);
       for (const [id, tt] of tiles) tt.el.classList.toggle('focus', id === app.id);
       if (e.button !== 0 || e.target.closest('input,textarea,select,button,label')) return;
       const r = el.getBoundingClientRect();
@@ -821,6 +1118,16 @@
     b.onclick = () => {
       if (findApp(id)) closeApp(id);
       else openApp(id, 'm', true);
+      /* The hero covers the whole canvas until the first message, so opening a
+         window from here without leaving centre mode gives you a tile that
+         exists, renders, and is completely invisible. */
+      if (state.apps.length) {
+        document.body.classList.remove('chat-center');
+        Chat.tuck(true);
+      } else if (!document.body.classList.contains('has-msgs')) {
+        document.body.classList.add('chat-center');   // emptied it again — the invitation comes back
+        Chat.tuck(false);
+      }
       relayout();
       persistLayout();
     };
@@ -855,6 +1162,20 @@
     if (d.desc) Chat.sendEvent(d.desc, d.label || 'Clicked', d.icon);
   });
 
+  /* A small handle for the browser tests (and for debugging a live session):
+     read-only views of what the client currently believes. */
+  window.__cham = {
+    sessionId: () => state.sessionId,
+    profile: () => state.profile,
+    plan: () => state.plan,
+    open: () => state.apps.map(a => a.id),
+    trace: () => trace.slice(),
+    repaintPlan: () => paintPlan(),
+    planPlace: () => (state.profile || {}).planPlace,
+    endTurn: () => enqueue({ t: '_end' }),
+  };
+
   relayout();
+  paintPlan();          // the spine, wherever this learner keeps it
   document.getElementById('chat-input').focus();
 })();

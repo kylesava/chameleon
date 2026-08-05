@@ -10,8 +10,17 @@
 <link rel="icon" type="image/png" href="chameleon.png">
 <link rel="stylesheet" href="style.css">
 </head>
-<body class="chat-center">
+<body class="chat-center booting">
   <div id="aurora"></div>
+
+  <!-- sign in, then the short baseline that sets how this person likes to work -->
+  <div id="gate">
+    <div id="gate-card">
+      <img class="gate-glyph" src="chameleon.png" alt="">
+      <div id="gate-body"></div>
+    </div>
+  </div>
+
   <div id="shell">
     <header id="topbar">
       <div id="brand">
@@ -29,6 +38,9 @@
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2.5" y="2.5" width="4.2" height="4.2" rx="1.2"/><rect x="9.3" y="2.5" width="4.2" height="4.2" rx="1.2"/><rect x="2.5" y="9.3" width="4.2" height="4.2" rx="1.2"/><rect x="9.3" y="9.3" width="4.2" height="4.2" rx="1.2"/></svg>
         </button>
         <div id="apps-pop"></div>
+      </div>
+      <div id="usermenu">
+        <button id="user-btn" title="How you like to work"><span id="user-initial">·</span></button>
       </div>
     </header>
 
@@ -50,6 +62,8 @@
           </button>
         </div>
         <div id="chat-status"><i></i><span></span></div>
+        <!-- the spine, when it lives in the conversation rather than a window -->
+        <div id="chat-plan"></div>
         <div id="chat-log-wrap"><div id="chat-log"></div></div>
         <div id="hero">
           <img class="hero-glyph" src="chameleon.png" alt="">
@@ -69,6 +83,9 @@
     </main>
   </div>
 
+  <div id="user-pop"></div>
+
+  <script src="gate.js"></script>
   <script src="layout.js"></script>
   <script src="richtext.js"></script>
   <script src="apps.js"></script>

@@ -18,6 +18,20 @@ const db = open();
 const store = makeStore(db);
 const api = makeApi(store);
 
+/* Seed the two accounts on first boot. Passwords come from .env when set;
+   the fallbacks are the agreed demo values and are fine for a private demo,
+   not for anything real. */
+const SEED = [
+  { username: 'matt', display: 'Matt', pass: ENV.MATT_PASSWORD || 'OldGuy' },
+  { username: 'kyle', display: 'Kyle', pass: ENV.KYLE_PASSWORD || 'YoungGuy' },
+];
+for (const s of SEED) {
+  if (!store.getUserByName(s.username)) {
+    store.createUser(s.username, s.pass, s.display);
+    console.log(`seeded user: ${s.username}`);
+  }
+}
+
 /* Asset versioning. Without an explicit Cache-Control the CDN in front of this
    (Cloudflare) applies its own multi-hour TTL to .js/.css — a deploy then ships
    new HTML against stale scripts, which breaks in confusing ways. HTML is never

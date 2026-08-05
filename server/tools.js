@@ -18,25 +18,67 @@ const SIZES = ['s', 'm', 'l', 'xl'];
 const buildTools = () => [
   {
     name: 'update_plan',
-    description: 'Create or replace the lesson plan — the visible checklist of goals the learner works through with you. Tasks in the same stage can be tackled in parallel; stages run in order. Keep it 3-8 tasks, concrete and checkable. Use set_task_status for progress instead of recreating the plan.',
+    description: `Create or replace the plan — the visible spine of the whole journey. 3-8 steps.
+
+A step is not a topic, it is a piece of WORK the learner does. Every step needs all four fields or it is guesswork to them:
+- title — what they will do, as an action ("Trace one carbon from glucose to CO₂"), not a subject heading ("The Krebs cycle")
+- detail — one line on why it matters or what it hinges on
+- done_when — the observable thing that ends it, in their words ("you can name all four stages without looking"). This is what tells them they're finished, so never leave it vague.
+- apps — which window(s) this step happens in, e.g. ["lesson"] or ["quiz"]. Usually ONE.
+
+Exactly one step is live at a time; set it with status "doing". Use set_task_status / complete_step for progress rather than rewriting the plan.`,
     input_schema: {
       type: 'object',
       required: ['title', 'tasks'],
       properties: {
-        title: { type: 'string', description: 'Short name for the learning goal, e.g. "Understand transformers"' },
+        title: { type: 'string', description: 'Short name for the overall goal, e.g. "Understand transformers"' },
         tasks: {
           type: 'array',
           items: {
             type: 'object',
-            required: ['title'],
+            required: ['title', 'done_when'],
             properties: {
-              title: { type: 'string', description: 'Checkable task, e.g. "Explain attention in your own words"' },
-              detail: { type: 'string', description: 'One line of context (optional)' },
-              stage: { type: 'integer', description: 'Ordering stage, 0-based. Same stage = parallel.' },
+              title: { type: 'string', description: 'The work, phrased as an action the learner does' },
+              detail: { type: 'string', description: 'One line: why this matters or what it hinges on' },
+              done_when: { type: 'string', description: 'The observable finish line, in their words' },
+              apps: { type: 'array', items: { type: 'string', enum: APP_IDS }, description: 'Which window(s) this step happens in — usually one' },
+              stage: { type: 'integer', description: 'Ordering stage, 0-based. Same stage = related work.' },
               status: { type: 'string', enum: ['todo', 'doing', 'done'] },
             },
           },
         },
+      },
+    },
+  },
+  {
+    name: 'remember_preference',
+    description: `Record a lasting preference the learner has just expressed about HOW they want to work. Use this the moment they say something durable — "stop opening two things at once", "put the plan in the chat", "don't ask me every step", "I never want podcasts", "less detail", "talk to me in chat rather than in the windows". Do NOT use it for one-off requests about the current topic ("skip this bit", "go back") — only for how the product should behave from now on.
+
+It takes effect immediately and permanently, is reflected in their settings, and you should acknowledge it in one short line. If they say something that maps to no setting here, do not force it — just do as they asked for now.`,
+    input_schema: {
+      type: 'object',
+      required: ['setting', 'value'],
+      properties: {
+        setting: {
+          type: 'string',
+          enum: ['parallelism', 'checkins', 'planPlace', 'voice', 'chatter', 'depth', 'visuals', 'priorKnowledge', 'apps'],
+          description: 'Which preference. parallelism=how many windows at once; checkins=whether to wait for them; planPlace=where the plan lives; voice=where you speak; chatter=how much you say in chat; depth=how much detail; visuals=diagram density; apps=turn a window on or off',
+        },
+        value: {
+          type: 'string',
+          description: 'parallelism: 1-4 · checkins: every-step|every-stage|rarely · planPlace: chat|window · voice: windows|both|chat · chatter: minimal|normal|full · depth: concise|balanced|thorough · visuals: plain|diagrams|rich · priorKnowledge: novice|some|strong · apps: "lesson:off" / "podcast:on"',
+        },
+        because: { type: 'string', description: 'One short line quoting or paraphrasing what they said, for the record' },
+      },
+    },
+  },
+  {
+    name: 'complete_step',
+    description: "Mark the live step finished and light the next one. Use this when the learner has actually shown the done_when condition — not merely been shown the material. If they need to confirm first (their settings will say), ask and wait rather than calling this.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        note: { type: 'string', description: 'Optional one-line record of what they demonstrated' },
       },
     },
   },
@@ -402,20 +444,130 @@ function applyLayoutActions(layout, actions) {
    ctx: { store, sessionId, emit(event), layout: {get, set} } */
 function makeExecutors(ctx) {
   const { store, sessionId, emit } = ctx;
+  /* The pacing guarantee. A prompt asking for one window at a time is a wish;
+     this is the enforcement. Windows newly opened in THIS turn are counted —
+     re-focusing or resizing something already open is free. */
+  const budget = Math.max(1, Number(ctx.maxApps) || 4);
+  const openedThisTurn = new Set();
+
+  /* Windows the learner has switched off entirely. Enforced rather than merely
+     asked for: a setting the agent can talk itself out of is not a setting.
+     plan and sources are structural and never switchable. */
+  const allowed = Array.isArray(ctx.allowedApps) ? ctx.allowedApps : null;
+  const planInChat = ctx.planPlace === 'chat';
+  const permitted = app => {
+    if (app === 'plan') return !planInChat;      // the spine is in the conversation
+    if (app === 'sources') return true;
+    return !allowed || allowed.includes(app);
+  };
+  const notAllowed = app => new Error(app === 'plan'
+    ? 'Refused: this learner keeps the plan in the conversation, not in a window. It is already on screen there — do not open a plan tile and do not re-list the steps in your reply.'
+    : `Refused: this learner has turned the ${app} window off. Do not build one, do not offer it, and do not mention it — use one of: ${(allowed || []).concat('sources').join(', ')}.`);
+
+  const isOpen = app => ctx.layout.get().some(l => l.app === app);
+  const withinBudget = (app) => {
+    if (app === 'plan' || isOpen(app) || openedThisTurn.has(app)) return true;
+    return openedThisTurn.size < budget;
+  };
+  /* Only a window that was not already there costs anything. Counting a no-op
+     re-open used to spend a one-window learner's entire budget on the plan tile
+     the model had just been told to show, after which every teaching window for
+     that turn was refused. */
+  const chargeFor = (app) => { if (app !== 'plan' && !isOpen(app)) openedThisTurn.add(app); };
+  const budgetError = () => new Error(
+    budget === 1
+      ? 'Refused: this learner works one window at a time and one is already open for this step. Finish with it, or close it first — do not open a second.'
+      : `Refused: budget of ${budget} window(s) for this turn is used up. Close something, or leave the rest for the next step.`);
 
   const openForArtifact = (app, size) => {
+    if (!permitted(app)) throw notAllowed(app);
+    if (!withinBudget(app)) throw budgetError();
+    chargeFor(app);
     const { layout, applied } = applyLayoutActions(ctx.layout.get(), [{ type: 'open', app, size: size || 'l', focus: true }]);
     ctx.layout.set(layout);
     applied.forEach(a => emit({ t: 'action', a }));
   };
 
   return {
+    /* The learner coaching the product in their own words. Same store the
+       settings sheet writes to, so what they say in chat and what they set by
+       hand are one thing, not two. */
+    remember_preference(input) {
+      if (!ctx.setPreference) return 'Preferences cannot be saved in this session.';
+      const setting = String(input.setting || '');
+      const raw = String(input.value || '').trim();
+      const ALLOWED = {
+        parallelism: v => (/^[1-4]$/.test(v) ? Number(v) : null),
+        checkins: v => (['every-step', 'every-stage', 'rarely'].includes(v) ? v : null),
+        planPlace: v => (['chat', 'window'].includes(v) ? v : null),
+        voice: v => (['windows', 'both', 'chat'].includes(v) ? v : null),
+        chatter: v => (['minimal', 'normal', 'full'].includes(v) ? v : null),
+        depth: v => (['concise', 'balanced', 'thorough'].includes(v) ? v : null),
+        visuals: v => (['plain', 'diagrams', 'rich'].includes(v) ? v : null),
+        priorKnowledge: v => (['novice', 'some', 'strong'].includes(v) ? v : null),
+      };
+      let patch = null;
+      if (setting === 'apps') {
+        const m = raw.match(/^(lesson|quiz|flashcards|podcast|deck)\s*[:=]\s*(on|off|true|false)$/i);
+        if (!m) return 'Not saved: apps takes "lesson:off" or "podcast:on".';
+        patch = { apps: { [m[1].toLowerCase()]: /^(on|true)$/i.test(m[2]) } };
+      } else {
+        const fn = ALLOWED[setting];
+        if (!fn) return `Not saved: "${setting}" is not a setting.`;
+        const v = fn(raw);
+        if (v === null) return `Not saved: "${raw}" is not a valid value for ${setting}.`;
+        patch = { [setting]: v };
+      }
+      const saved = ctx.setPreference(patch, input.because || '');
+      emit({ t: 'preference', patch, because: String(input.because || '').slice(0, 200) });
+      /* It applies from the NEXT turn — this turn's executors were built with
+         the old budget, and silently changing it mid-turn would be worse than
+         saying so plainly. */
+      return `Saved. ${JSON.stringify(patch)} is now their setting and takes effect from the next turn. Acknowledge it in one short line — do not restate the whole setting list.` +
+        (saved && saved.note ? ` (${saved.note})` : '');
+    },
+
     update_plan(input) {
-      const plan = store.setPlan(sessionId, input.title, input.tasks);
+      const tasks = (input.tasks || []).map(t => ({ ...t }));
+      /* A step with no finish line is the guesswork this rebuild exists to
+         remove, so it is refused rather than warned about — a warning arrives
+         after the learner has already been shown the vague plan. */
+      const vague = tasks.filter(t => !String(t.done_when || '').trim());
+      if (vague.length) {
+        throw new Error(
+          `Refused: ${vague.length} step(s) have no done_when — ${vague.map(t => `"${t.title}"`).join(', ')}. ` +
+          'Every step needs the observable thing that ends it, written in the learner\'s words ' +
+          '("you can name all four stages without looking"). Call update_plan again with all of them filled in.');
+      }
+      // the spine is meaningless without a live step, so guarantee one
+      if (tasks.length && !tasks.some(t => t.status === 'doing')) {
+        const first = tasks.find(t => t.status !== 'done');
+        if (first) first.status = 'doing';
+      }
+      const plan = store.setPlan(sessionId, input.title, tasks);
       emit({ t: 'plan', plan });
-      openForArtifact('plan', 'm');
-      return `Plan saved: "${plan.title}" with ${plan.tasks.length} tasks — ` +
+      /* When the spine lives in the conversation there is no tile to open —
+         the chat surface renders it. Opening one anyway would be exactly the
+         extra window this learner asked not to have. */
+      if (ctx.planPlace !== 'chat') {
+        // the plan window never counts against the budget: it is the spine, not
+        // a thing to work in
+        const { layout, applied } = applyLayoutActions(ctx.layout.get(), [{ type: 'open', app: 'plan', size: 'm', focus: true }]);
+        ctx.layout.set(layout);
+        applied.forEach(a => emit({ t: 'action', a }));
+      }
+      return `Plan saved: "${plan.title}" with ${plan.tasks.length} steps — ` +
         plan.tasks.map(t => `#${t.id} [stage ${t.stage}] ${t.title} (${t.status})`).join('; ');
+    },
+
+    complete_step(input) {
+      const r = store.advancePlan(sessionId);
+      if (!r) return 'No plan to advance.';
+      emit({ t: 'plan', plan: r.plan });
+      if (ctx.onStepComplete) ctx.onStepComplete(r.completed);
+      return r.next
+        ? `Completed "${r.completed ? r.completed.title : '—'}"${input.note ? ` (${input.note})` : ''}. Now live: #${r.next.id} "${r.next.title}" — done when: ${r.next.done_when || 'not stated'}.`
+        : `Completed "${r.completed ? r.completed.title : '—'}". That was the last step — the plan is finished.`;
     },
 
     set_task_status(input) {
@@ -430,11 +582,39 @@ function makeExecutors(ctx) {
     },
 
     layout(input) {
-      const { layout, applied } = applyLayoutActions(ctx.layout.get(), input.actions);
+      // opens are filtered against the budget; closes/resizes/focus always pass
+      const requested = input.actions || [];
+      const actions = [];
+      const blocked = [];
+      let refused = 0;
+      let spineClose = false;
+      const hasPlan = !planInChat && !!store.getPlan(sessionId);  // nothing to protect if the spine is in chat
+      for (const a of requested) {
+        if (a.type === 'open') {
+          if (!permitted(a.app)) { blocked.push(a.app); continue; }
+          if (!withinBudget(a.app)) { refused++; continue; }
+          chargeFor(a.app);
+        }
+        /* Told to keep one window open, a model dutifully closes the plan to
+           make room — losing the learner the one window that tells them where
+           they are. The learner may close it; the agent may not. */
+        if (a.type === 'close' && a.app === 'plan' && hasPlan) { spineClose = true; continue; }
+        if (a.type === 'close_all' && hasPlan) {
+          // rewritten as explicit closes so the plan survives the sweep
+          for (const l of ctx.layout.get()) if (l.app !== 'plan') actions.push({ type: 'close', app: l.app });
+          spineClose = true;
+          continue;
+        }
+        actions.push(a);
+      }
+      const { layout, applied } = applyLayoutActions(ctx.layout.get(), actions);
       ctx.layout.set(layout);
       applied.forEach(a => emit({ t: 'action', a }));
       const now = layout.length ? layout.map(l => `${l.app}(${l.size}${l.focus ? ', focused' : ''})`).join(', ') : 'empty';
-      return `Applied ${applied.length} action(s). Workspace now: ${now}`;
+      return `Applied ${applied.length} action(s). Workspace now: ${now}` +
+        (blocked.length ? ` — ${notAllowed(blocked[0]).message}` : '') +
+        (refused ? ` — ${refused} open(s) refused: ${budgetError().message}` : '') +
+        (spineClose ? ' — the plan window was kept open: it is the spine, does not count against the window budget, and is never yours to close. Shrink it to "s" if you need the room.' : '');
     },
 
     narrate(input) {
@@ -444,25 +624,40 @@ function makeExecutors(ctx) {
     },
 
     create_lesson(input) {
+      /* Validate and check the budget BEFORE writing. Saving first meant a
+         refused open left the artifact behind, so each retry stacked up another
+         copy of the same lesson — and a non-array `sections` was persisted and
+         then crashed the renderer on every paint, permanently. */
+      const sections = (Array.isArray(input.sections) ? input.sections : [])
+        .filter(s => s && typeof s === 'object' && (s.heading || s.body));
+      if (!sections.length) throw new Error('Refused: a lesson needs a sections array, each with a heading and a body.');
+      if (!permitted('lesson')) throw notAllowed('lesson');
+      if (!withinBudget('lesson')) throw budgetError();
       const art = store.saveArtifact(sessionId, 'lesson', input.title,
-        { title: input.title, sections: input.sections }, input.artifact_id || null);
+        { title: input.title, sections }, input.artifact_id || null);
       emit({ t: 'artifact', app: 'lesson', artifact: art });
       openForArtifact('lesson', input.size || 'l');
-      return `Lesson artifact #${art.id} saved (${input.sections.length} sections) and opened.`;
+      return `Lesson artifact #${art.id} saved (${sections.length} sections) and opened.`;
     },
 
     create_flashcards(input) {
+      const cards = (Array.isArray(input.cards) ? input.cards : []).filter(c => c && (c.front || c.back));
+      if (!cards.length) throw new Error('Refused: a deck needs a cards array, each with a front and a back.');
+      if (!permitted('flashcards')) throw notAllowed('flashcards');
+      if (!withinBudget('flashcards')) throw budgetError();
       const art = store.saveArtifact(sessionId, 'flashcards', input.title,
-        { title: input.title, cards: input.cards }, input.artifact_id || null);
+        { title: input.title, cards }, input.artifact_id || null);
       emit({ t: 'artifact', app: 'flashcards', artifact: art });
       openForArtifact('flashcards', 'm');
-      return `Flashcard deck #${art.id} saved (${input.cards.length} cards) and opened.`;
+      return `Flashcard deck #${art.id} saved (${cards.length} cards) and opened.`;
     },
 
     create_quiz(input) {
       const qs = (input.questions || []).filter(q =>
         q.type === 'free' || (q.type === 'mc' && Array.isArray(q.choices) && q.choices.length >= 2 && Number.isInteger(q.answer_index)));
       if (!qs.length) throw new Error('quiz needs at least one valid question');
+      if (!permitted('quiz')) throw notAllowed('quiz');
+      if (!withinBudget('quiz')) throw budgetError();
       const art = store.saveArtifact(sessionId, 'quiz', input.title,
         { title: input.title, questions: qs }, input.artifact_id || null);
       emit({ t: 'artifact', app: 'quiz', artifact: art });
@@ -473,6 +668,8 @@ function makeExecutors(ctx) {
     create_deck(input) {
       const slides = (input.slides || []).filter(s => s && s.layout);
       if (!slides.length) throw new Error('a deck needs at least one slide');
+      if (!permitted('deck')) throw notAllowed('deck');
+      if (!withinBudget('deck')) throw budgetError();
       const art = store.saveArtifact(sessionId, 'deck', input.title,
         { title: input.title, subtitle: input.subtitle || '', slides }, input.artifact_id || null);
       emit({ t: 'artifact', app: 'deck', artifact: art });
@@ -481,11 +678,15 @@ function makeExecutors(ctx) {
     },
 
     create_podcast(input) {
+      const lines = (Array.isArray(input.lines) ? input.lines : []).filter(l => l && l.text);
+      if (!lines.length) throw new Error('Refused: a podcast needs a lines array, each with a host and text.');
+      if (!permitted('podcast')) throw notAllowed('podcast');
+      if (!withinBudget('podcast')) throw budgetError();
       const art = store.saveArtifact(sessionId, 'podcast', input.title,
-        { title: input.title, description: input.description || '', lines: input.lines }, input.artifact_id || null);
+        { title: input.title, description: input.description || '', lines }, input.artifact_id || null);
       emit({ t: 'artifact', app: 'podcast', artifact: art });
       openForArtifact('podcast', 'm');
-      return `Podcast script #${art.id} saved (${input.lines.length} lines) and opened. Audio synthesizes when the learner presses play.`;
+      return `Podcast script #${art.id} saved (${lines.length} lines) and opened. Audio synthesizes when the learner presses play.`;
     },
 
     add_note(input) {

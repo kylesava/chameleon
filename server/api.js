@@ -4,6 +4,11 @@ const { runTurn } = require('./agent.js');
 const tts = require('./tts.js');
 const images = require('./images.js');
 const audit = require('./log.js');
+const auth = require('./auth.js');
+const profileModel = require('./profile.js');
+const { ENV } = require('./env.js');
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function json(res, code, obj) {
   res.writeHead(code, { 'content-type': 'application/json' });
@@ -35,6 +40,17 @@ function htmlToText(html) {
     .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
   return s.replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*/g, '\n\n').trim();
 }
+
+const publicUser = u => ({ id: u.id, username: u.username, display_name: u.display_name });
+
+/* One shape for the profile, everywhere it crosses the wire: what they told us,
+   what we concluded, and whether they have been asked yet. The client reads
+   `effective` and nothing else. */
+const shapeProfile = p => ({
+  onboarded: !!p.onboarded,
+  stated: profileModel.normalise(p).stated,
+  effective: profileModel.derive(p),
+});
 
 function makeApi(store) {
   const inflight = new Map(); // session id -> AbortController for the running turn
@@ -68,6 +84,50 @@ function makeApi(store) {
   }
 
   async function route(req, res, pathname, query) {
+    /* ---------- who is this? ----------
+       Everything except login and the log itself needs a session. Profiles
+       and journeys are per person, so an anonymous request has nowhere to go. */
+    if (req.method === 'POST' && pathname === '/api/login') {
+      const b = await readJson(req);
+      const name = String(b.username || '').trim().toLowerCase();
+      const key = name || 'anon';
+      const wait = auth.failDelay(key);
+      if (wait) await sleep(wait);
+      const user = store.getUserByName(name);
+      if (!user || !auth.verifyPassword(b.password || '', user.pass_hash)) {
+        auth.noteFail(key);
+        audit.log('login_failed', { username: audit.trim(name, 40) });
+        return json(res, 401, { error: 'Wrong username or password' });
+      }
+      auth.noteSuccess(key);
+      audit.log('login', { user: user.id, username: user.username });
+      res.setHeader('set-cookie', auth.cookieFor(auth.issue(user.id), req));
+      return json(res, 200, { user: publicUser(user) });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/logout') {
+      res.setHeader('set-cookie', auth.clearCookie(req));
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/me') {
+      const uid = auth.userIdFrom(req);
+      const user = uid ? store.getUser(uid) : null;
+      if (!user) return json(res, 200, { user: null, users: store.listUsers().map(u => u.username) });
+      return json(res, 200, { user: publicUser(user), profile: shapeProfile(store.getProfile(user.id)) });
+    }
+
+    const userId = auth.userIdFrom(req);
+    const isOpen = pathname === '/api/log' || pathname === '/api/client-error';
+    if (!userId && !isOpen) return json(res, 401, { error: 'not signed in' });
+    const me = userId ? store.getUser(userId) : null;
+    if (userId && !me && !isOpen) return json(res, 401, { error: 'unknown session' });
+
+    /* Everything below addresses a journey by id. One guard, applied at every
+       entry point, so a stale or guessed id can never reach someone else's
+       work. */
+    const mine = sid => !!(sid && store.getSession(Number(sid), userId));
+
     /* ---------- audit trail ----------
        Everything the learner did and the agent did back. Token-gated because
        it contains their words verbatim. */
@@ -98,13 +158,15 @@ function makeApi(store) {
       /* A plain load always starts fresh — no resuming half an old lesson.
          (Real persistence arrives with accounts; ?session=N still returns to
          a specific journey, and past ones stay in the switcher.) */
-      let session = query.get('session') ? store.getSession(Number(query.get('session'))) : null;
+      let session = query.get('session') ? store.getSession(Number(query.get('session')), userId) : null;
       if (!session) {
-        store.pruneEmptySessions();
-        session = store.createSession('New journey');
+        store.pruneEmptySessions(null, userId);
+        session = store.createSession('New journey', userId);
       }
-      const sessions = store.listSessions();
+      const sessions = store.listSessions(userId);
       return json(res, 200, {
+        user: publicUser(me),
+        profile: shapeProfile(store.getProfile(userId)),
         session: { ...session, layout: JSON.parse(session.layout_json) },
         sessions,
         messages: store.listMessages(session.id),
@@ -119,12 +181,13 @@ function makeApi(store) {
 
     if (req.method === 'POST' && pathname === '/api/session') {
       const b = await readJson(req);
-      const s = store.createSession(b.title);
+      const s = store.createSession(b.title, userId);
       return json(res, 200, { session: s });
     }
 
     if (req.method === 'POST' && pathname === '/api/session/rename') {
       const b = await readJson(req);
+      if (!store.getSession(Number(b.session_id), userId)) return json(res, 404, { error: 'no such journey' });
       store.renameSession(Number(b.session_id), String(b.title || 'Journey'));
       return json(res, 200, { ok: true });
     }
@@ -132,15 +195,62 @@ function makeApi(store) {
     /* ---------- layout snapshot (user drags/resizes/closes) ---------- */
     if (req.method === 'POST' && pathname === '/api/layout') {
       const b = await readJson(req);
+      if (!store.getSession(Number(b.session_id), userId)) return json(res, 404, { error: 'no such journey' });
       store.saveLayout(Number(b.session_id), b.layout || []);
       return json(res, 200, { ok: true });
+    }
+
+    /* ---------- how this person likes to work ---------- */
+    if (req.method === 'POST' && pathname === '/api/profile') {
+      const b = await readJson(req);
+      const current = store.getProfile(userId);
+      const saved = store.saveProfile(userId, {
+        ...current,
+        onboarded: b.onboarded !== undefined ? !!b.onboarded : current.onboarded,
+        stated: { ...current.stated, ...(b.stated || {}) },
+      });
+      audit.log('profile_set', { user: userId, stated: JSON.stringify(saved.stated) });
+      return json(res, 200, { profile: shapeProfile(saved) });
+    }
+
+    /* Behaviour feeding the profile — closing a window straight after it opened,
+       asking to slow down, pressing Continue. */
+    if (req.method === 'POST' && pathname === '/api/signal') {
+      const b = await readJson(req);
+      const saved = store.recordSignal(userId, b.session_id || null, String(b.kind || ''), b.detail || '', b.value);
+      return json(res, 200, { profile: shapeProfile(saved) });
+    }
+
+    /* Seeding hook for the browser tests: lets a test put a known plan on
+       screen without spending an agent turn. Off unless CHAMELEON_TEST is set,
+       so it does not exist in production. */
+    if (ENV.CHAMELEON_TEST && req.method === 'POST' && pathname === '/api/test/plan') {
+      const b = await readJson(req);
+      if (!mine(b.session_id)) return json(res, 404, { error: 'no such journey' });
+      const tasks = (b.tasks || []).map((t, i) => ({ ...t, status: t.status || (i === 0 ? 'doing' : 'todo') }));
+      return json(res, 200, { plan: store.setPlan(Number(b.session_id), String(b.title || 'Plan'), tasks) });
+    }
+
+    /* The learner saying "I'm ready" — the explicit advance in guided mode. */
+    if (req.method === 'POST' && pathname === '/api/step') {
+      const b = await readJson(req);
+      const sid = Number(b.session_id);
+      if (!store.getSession(sid, userId)) return json(res, 404, { error: 'no such journey' });
+      if (b.action === 'current' && b.task_id) {
+        return json(res, 200, { plan: store.setCurrentTask(sid, Number(b.task_id)) });
+      }
+      const r = store.advancePlan(sid);
+      if (!r) return json(res, 409, { error: 'no plan yet' });
+      store.recordSignal(userId, sid, 'advance');
+      if (r.completed) store.recordSignal(userId, sid, 'step_completed');
+      return json(res, 200, { plan: r.plan, completed: r.completed, next: r.next });
     }
 
     /* ---------- the agent turn (SSE) ---------- */
     if (req.method === 'POST' && pathname === '/api/chat') {
       const b = await readJson(req);
       const sessionId = Number(b.session_id);
-      const session = store.getSession(sessionId);
+      const session = store.getSession(sessionId, userId);
       if (!session) return json(res, 404, { error: 'no such session' });
       if (!b.content || typeof b.content !== 'string') return json(res, 400, { error: 'content required' });
       if (!(await takeover(sessionId))) return json(res, 409, { error: 'previous turn is still stopping — try again' });
@@ -174,6 +284,22 @@ function makeApi(store) {
           // the raw description is written for the model, not for them
           label: b.label ? String(b.label).slice(0, 120) : null,
           emit, signal: ac.signal, layout, tlog,
+          effective: profileModel.derive(store.getProfile(userId)),
+          onStepComplete: () => store.recordSignal(userId, sessionId, 'step_completed'),
+          /* The learner coaching the product from the chat. Writes to the same
+             profile the settings sheet edits — one source of truth, whether
+             they said it or clicked it. */
+          setPreference: (patch, because) => {
+            const current = store.getProfile(userId);
+            const stated = { ...current.stated, ...patch };
+            if (patch.apps) stated.apps = { ...(current.stated || {}).apps, ...patch.apps };
+            store.saveProfile(userId, { ...current, stated });
+            audit.log('preference_learned', {
+              user: userId, session: sessionId,
+              patch: JSON.stringify(patch), because: audit.trim(String(because || ''), 160),
+            });
+            return { note: 'their settings sheet now shows this too' };
+          },
         });
         emit({ t: 'done' });
       } catch (e) {
@@ -195,7 +321,7 @@ function makeApi(store) {
     if (req.method === 'POST' && pathname === '/api/source') {
       const b = await readJson(req);
       const sessionId = Number(b.session_id);
-      if (!store.getSession(sessionId)) return json(res, 404, { error: 'no such session' });
+      if (!mine(sessionId)) return json(res, 404, { error: 'no such journey' });
       let src;
       if (b.url) {
         let url;
@@ -221,6 +347,8 @@ function makeApi(store) {
 
     if (req.method === 'DELETE' && pathname.startsWith('/api/source/')) {
       const id = Number(pathname.split('/').pop());
+      const src = store.getSource(id);
+      if (!src || !mine(src.session_id)) return json(res, 404, { error: 'no such source' });
       store.deleteSource(id);
       return json(res, 200, { ok: true });
     }
@@ -232,6 +360,7 @@ function makeApi(store) {
     if (req.method === 'POST' && pathname === '/api/task') {
       const b = await readJson(req);
       const sessionId = Number(b.session_id);
+      if (!mine(sessionId)) return json(res, 404, { error: 'no such journey' });
       let task = null;
       if (b.status) task = store.setTaskStatus(Number(b.task_id), String(b.status));
       else if (b.title !== undefined || b.detail !== undefined) task = store.updateTask(Number(b.task_id), b);
@@ -241,13 +370,15 @@ function makeApi(store) {
     }
     if (req.method === 'DELETE' && pathname.startsWith('/api/task/')) {
       const id = Number(pathname.split('/').pop());
-      const ok = store.deleteTask(id);
       const sid = Number(query.get('session'));
+      if (!mine(sid)) return json(res, 404, { error: 'no such journey' });
+      const ok = store.deleteTask(id);
       return json(res, ok ? 200 : 404, ok ? { ok: true, plan: sid ? store.getPlan(sid) : null } : { error: 'no such task' });
     }
     if (req.method === 'POST' && pathname === '/api/task/new') {
       const b = await readJson(req);
       if (!b.title || !String(b.title).trim()) return json(res, 400, { error: 'title required' });
+      if (!mine(b.session_id)) return json(res, 404, { error: 'no such journey' });
       const task = store.addTask(Number(b.session_id), b.title, { stage: b.stage, detail: b.detail });
       if (!task) return json(res, 409, { error: 'no plan yet' });
       return json(res, 200, { task, plan: store.getPlan(Number(b.session_id)) });
@@ -257,7 +388,7 @@ function makeApi(store) {
     if (req.method === 'POST' && pathname === '/api/quiz-attempt') {
       const b = await readJson(req);
       const art = store.getArtifact(Number(b.artifact_id));
-      if (!art || art.app !== 'quiz') return json(res, 404, { error: 'no such quiz' });
+      if (!art || art.app !== 'quiz' || !mine(art.session_id)) return json(res, 404, { error: 'no such quiz' });
       const answers = Array.isArray(b.answers) ? b.answers : [];
       let mc = 0, mcRight = 0;
       const results = art.data.questions.map((q, i) => {
@@ -269,6 +400,8 @@ function makeApi(store) {
       });
       const score = mc ? mcRight / mc : null;
       store.addAttempt(art.id, answers, score);
+      if (score !== null) store.recordSignal(userId, art.session_id, 'quiz_score', art.title, score);
+      store.recordSignal(userId, art.session_id, 'app_used', 'quiz');
       return json(res, 200, { score, mc, mcRight, results });
     }
 
@@ -276,7 +409,7 @@ function makeApi(store) {
     if (req.method === 'POST' && pathname === '/api/tts') {
       const b = await readJson(req);
       const art = store.getArtifact(Number(b.artifact_id));
-      if (!art || art.app !== 'podcast') return json(res, 404, { error: 'no such podcast' });
+      if (!art || art.app !== 'podcast' || !mine(art.session_id)) return json(res, 404, { error: 'no such podcast' });
       const line = art.data.lines[Number(b.line)];
       if (!line) return json(res, 400, { error: 'bad line index' });
       try {

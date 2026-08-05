@@ -11,6 +11,10 @@
   const short = s => { s = String(s ?? ''); return s.length > 30 ? s.slice(0, 28) + '…' : s; };
 
   const md = Rich.md;
+  /* Question text is written by the same model that writes the lessons, so it
+     arrives with $\sqrt{d_k}$, **bold** and `code` in it. Escaping it showed
+     the learner raw LaTeX; inline markdown renders it the way the lesson does. */
+  const inline = Rich.inline;
 
   /* ---- icons (inline SVG, 16px, stroke) ---- */
   const I = {
@@ -22,6 +26,8 @@
     podcast: '<rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/>',
     deck: '<rect x="2" y="3" width="12" height="8" rx="1.5"/><path d="M6 13.5h4M8 11v2.5"/>',
     pointer: '<path d="M4.5 2.5l8 6.5-4 .9 2 4.6-2 .9-2-4.6-2.8 3z"/>',
+    check: '<path d="M3 8.5l3.2 3.2L13 5"/>',
+    play: '<path d="M5.5 3.4l7 4.6-7 4.6z"/>',
   };
   const icon = id => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${I[id] || I.lesson}</svg>`;
 
@@ -32,7 +38,7 @@
     lesson:     { name: 'Lesson',     hue: 172, sizes: { s: [3, 2], m: [4, 3], l: [5, 5], xl: [6, 6] }, max: [8, 6], desc: 'The current lesson — click a section to go deeper' },
     quiz:       { name: 'Quiz',       hue: 268, sizes: { s: [2, 2], m: [3, 3], l: [4, 5], xl: [6, 6] }, max: [6, 6], desc: 'Interactive check of what stuck' },
     flashcards: { name: 'Flashcards', hue: 38,  sizes: { s: [2, 2], m: [3, 2], l: [4, 3], xl: [5, 4] }, max: [5, 4], desc: 'Spaced practice deck' },
-    podcast:    { name: 'Podcast',    hue: 330, sizes: { s: [2, 1], m: [3, 2], l: [4, 3], xl: [4, 4] }, max: [4, 4], desc: 'Two-host audio overview with real voices' },
+    podcast:    { name: 'Podcast',    hue: 330, sizes: { s: [2, 2], m: [3, 2], l: [4, 3], xl: [4, 4] }, max: [4, 4], desc: 'Two-host audio overview with real voices' },
     deck:       { name: 'Deck',       hue: 292, sizes: { s: [3, 2], m: [4, 3], l: [5, 4], xl: [8, 6] }, max: [8, 6], desc: 'Slides you can present, with speaker notes' },
   };
 
@@ -45,7 +51,11 @@
     sessionId: () => null,
     draftFor: () => null,
     statusFor: () => null,
+    isBusy: () => false,
     planChanged: () => {},
+    /* the spine in the chat changes the dock's height, and the canvas has to
+       give way — expanding the step list must not push tiles under the card */
+    planResized: () => {},
     sourceAdded: () => {},
     sourceRemoved: () => {},
     api: async () => { throw new Error('not configured'); },
@@ -112,6 +122,62 @@
     document.dispatchEvent(new CustomEvent('chameleon:event', { detail }));
   }
 
+  /* Something went wrong, said in the app's own voice. A native alert() steals
+     focus, looks like a browser error rather than part of the product, and in
+     a demo reads as a crash. Same reason there is no confirm() or prompt()
+     anywhere in here. */
+  let toastT = 0;
+  function toast(message, kind) {
+    let el = document.getElementById('toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toast';
+      document.body.appendChild(el);
+    }
+    el.className = kind === 'good' ? 'good' : 'bad';
+    el.textContent = String(message || 'Something went wrong');
+    el.classList.add('on');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => el.classList.remove('on'), 4200);
+  }
+
+  /* The three things a learner can do to the spine. Shared, so the plan window
+     and the plan-in-chat cannot drift apart in what they tell the agent. */
+  const STEP = {
+    async advance(live, onDone) {
+      let next = null;
+      try {
+        const r = await CTX.api('/api/step', { session_id: CTX.sessionId(), action: 'advance' });
+        next = r.next;
+        if (r.plan) CTX.planChanged(r.plan);
+      } catch (e) { toast(e.message); if (onDone) onDone(false); return; }
+      emit({
+        desc: next
+          ? `finished the step "${live.title}" and pressed the button to move on. The live step is now "${next.title}". Do not congratulate at length — one line, then set up this new step and stop.`
+          : `finished the last step, "${live.title}". The plan is complete. Offer a short recap and ask what they want next; do not invent new steps unprompted.`,
+        label: 'Ready · next step', icon: 'plan',
+      });
+      if (onDone) onDone(true);
+    },
+    async stuck(live) {
+      try { await CTX.api('/api/signal', { session_id: CTX.sessionId(), kind: 'slow_down', detail: live.title }); } catch { /* the turn matters more than the signal */ }
+      emit({
+        desc: `pressed "I'm stuck" on the step "${live.title}". Do NOT move on and do NOT repeat the same explanation. Work out what part is unclear — ask one short diagnostic question, or re-teach the single hardest idea a different way (a concrete example, a diagram, smaller pieces). Stay on this step.`,
+        label: "I'm stuck", icon: 'plan',
+      });
+    },
+    async jump(task) {
+      try {
+        const r = await CTX.api('/api/step', { session_id: CTX.sessionId(), action: 'current', task_id: task.id });
+        if (r.plan) CTX.planChanged(r.plan);
+      } catch (e) { return toast(e.message); }
+      emit({
+        desc: `jumped to the step "${task.title}" (it is now the live step). Set it up and teach it; do not restart from the beginning.`,
+        label: `Start · ${short(task.title)}`, icon: 'plan',
+      });
+    },
+  };
+
   const empty = (el, ico, text) => {
     el.innerHTML = `<div class="app-empty">${icon(ico)}<span>${esc(text)}</span></div>`;
   };
@@ -141,8 +207,39 @@
     const r = 15, c = 2 * Math.PI * r;
     const stages = new Map();
     plan.tasks.forEach(t => { if (!stages.has(t.stage)) stages.set(t.stage, []); stages.get(t.stage).push(t); });
-    const compact = el.clientHeight < 200;
+    /* In a short tile the step card and its buttons are what matter; the trail
+       below can go entirely rather than pushing the one control the learner
+       needs past the bottom edge. */
+    const compact = el.clientHeight < 320;
+    const cramped = el.clientHeight < 240;
     const live = plan.tasks.find(t => t.status === 'doing');
+    const idx = live ? plan.tasks.indexOf(live) : -1;
+    const busy = CTX.isBusy && CTX.isBusy();
+
+    /* The current step is the whole point of the window: what you are doing,
+       how you will know you are finished, and the one button that moves you on.
+       Everything else on this surface is context for it. */
+    const stepCard = live ? `
+      <div class="plan-now" data-t="${live.id}">
+        <div class="pn-top">
+          <em>step ${idx + 1} of ${plan.tasks.length}</em>
+          ${live.apps && live.apps.length ? `<span class="pn-apps">${live.apps.map(a =>
+    `<i title="${esc((REGISTRY[a] || {}).name || a)}">${icon(a)}</i>`).join('')}</span>` : ''}
+        </div>
+        <b>${esc(live.title)}</b>
+        ${live.detail ? `<p class="pn-do">${esc(live.detail)}</p>` : ''}
+        ${live.done_when ? `<div class="pn-done"><i>${icon('check')}</i><span>${esc(live.done_when)}</span></div>` : ''}
+        <div class="pn-actions">
+          <button class="pn-go" ${busy ? 'disabled' : ''}>${idx === plan.tasks.length - 1 ? 'Finish this step' : "I'm ready — next step"}</button>
+          <button class="pn-stuck" ${busy ? 'disabled' : ''} title="Slow down and go over this again">I'm stuck</button>
+        </div>
+      </div>` : `
+      <div class="plan-now idle">
+        <b>${done === plan.tasks.length ? 'All steps done' : 'Nothing in progress'}</b>
+        <p class="pn-do">${done === plan.tasks.length
+    ? 'Ask for a recap, a harder quiz, or something new.'
+    : 'Pick a step below to start it, or tell me where you want to begin.'}</p>
+      </div>`;
 
     el.innerHTML = `
       <div class="plan">
@@ -153,29 +250,46 @@
               stroke-dasharray="${(c * pct / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 19 19)"/>
             <text x="19" y="22.5">${pct}%</text>
           </svg>
-          <div class="plan-title"><b>${esc(plan.title)}</b><span>${done} of ${plan.tasks.length} goals</span></div>
+          <div class="plan-title"><b>${esc(plan.title)}</b><span>${done} of ${plan.tasks.length} steps</span></div>
         </div>
-        ${live ? `<div class="plan-live">
-          <em>working on now</em>
-          <b>${esc(live.title)}</b>
-          ${live.detail && !compact ? `<span>${esc(live.detail)}</span>` : ''}
-        </div>` : ''}
-        <div class="plan-body">
+        ${stepCard}
+        <div class="plan-body"${cramped ? ' hidden' : ''}>
           ${[...stages.entries()].sort((a, b) => a[0] - b[0]).map(([stage, tasks]) => `
             ${stages.size > 1 && !compact ? `<div class="plan-stage">stage ${stage + 1}</div>` : ''}
             ${tasks.map(t => `
               <div class="plan-task ${t.status}" data-t="${t.id}">
-                <label class="pt-tick" title="${t.status === 'done' ? 'Reopen this goal' : 'Already know this? Tick to skip it'}">
+                <label class="pt-tick" title="${t.status === 'done' ? 'Reopen this step' : 'Already know this? Tick to skip it'}">
                   <input type="checkbox" ${t.status === 'done' ? 'checked' : ''}>
                   <i class="pt-mark"></i>
                 </label>
-                <div class="pt-text"><b contenteditable="plaintext-only" spellcheck="false" title="Click to rewrite this goal">${esc(t.title)}</b>${t.detail && !compact && t.status !== 'done' ? `<span>${esc(t.detail)}</span>` : ''}</div>
-                <button class="pt-del" title="Remove this goal">×</button>
+                <div class="pt-text"><b contenteditable="plaintext-only" spellcheck="false" title="Click to rewrite this step">${esc(t.title)}</b>${t.detail && !compact && t.status === 'todo' ? `<span>${esc(t.detail)}</span>` : ''}</div>
+                ${t.status === 'doing' ? '' : `<button class="pt-start" title="Start this step now">${icon('play')}</button>`}
+                <button class="pt-del" title="Remove this step">×</button>
               </div>`).join('')}
           `).join('')}
-          <button class="plan-add">+ add a goal</button>
+          <button class="plan-add">+ add a step</button>
         </div>
       </div>`;
+
+    /* Ready / stuck. Both are one round trip and then an agent turn, so the
+       learner never has to compose a sentence to move. */
+    const go = el.querySelector('.pn-go');
+    if (go) go.onclick = () => {
+      go.disabled = true;
+      const card = el.querySelector('.plan-now');
+      card.classList.add('advancing');
+      STEP.advance(live, ok => { if (!ok) { card.classList.remove('advancing'); go.disabled = false; } });
+    };
+
+    const stuck = el.querySelector('.pn-stuck');
+    if (stuck) stuck.onclick = () => { stuck.disabled = true; STEP.stuck(live); };
+
+    /* Jump the spine to a different step without waiting for a turn. */
+    el.querySelectorAll('.pt-start').forEach(btn => btn.onclick = ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const id = Number(btn.closest('.plan-task').dataset.t);
+      STEP.jump(plan.tasks.find(t => t.id === id));
+    });
 
     /* Rename in place. Applies on blur or Enter; Escape reverts. No agent turn
        — the plan is yours to steer and steering shouldn't cost a round trip. */
@@ -210,14 +324,35 @@
       } catch { row.classList.remove('removing'); }
     });
 
+    /* Adding a step happens in the list, where the step will live — a browser
+       prompt() would be a modal dialog in the middle of a workspace that has
+       none. */
     const addBtn = el.querySelector('.plan-add');
-    if (addBtn) addBtn.onclick = async () => {
-      const title = prompt('What else do you want to cover?');
-      if (!title || !title.trim()) return;
-      try {
-        const r = await CTX.api('/api/task/new', { session_id: CTX.sessionId(), title: title.trim() });
-        if (r.plan) CTX.planChanged(r.plan);
-      } catch (e) { alert(e.message); }
+    if (addBtn) addBtn.onclick = () => {
+      addBtn.hidden = true;
+      const row = document.createElement('div');
+      row.className = 'plan-new';
+      row.innerHTML = '<input placeholder="What else do you want to cover?" maxlength="200"><button>Add</button>';
+      addBtn.parentNode.insertBefore(row, addBtn);
+      const input = row.querySelector('input');
+      input.focus();
+      const cancel = () => { row.remove(); addBtn.hidden = false; };
+      const save = async () => {
+        const title = input.value.trim();
+        if (!title) return cancel();
+        input.disabled = true;
+        try {
+          const r = await CTX.api('/api/task/new', { session_id: CTX.sessionId(), title });
+          if (r.plan) CTX.planChanged(r.plan);
+        } catch (e) { toast(e.message); cancel(); }
+      };
+      row.querySelector('button').onclick = save;
+      input.onkeydown = ev => {
+        ev.stopPropagation();
+        if (ev.key === 'Enter') { ev.preventDefault(); save(); }
+        else if (ev.key === 'Escape') cancel();
+      };
+      input.onblur = () => setTimeout(() => { if (document.body.contains(row) && document.activeElement !== row.querySelector('button')) cancel(); }, 150);
     };
 
     el.querySelectorAll('.plan-task input').forEach(cb => cb.onchange = async () => {
@@ -235,6 +370,85 @@
       });
     });
   };
+
+  /* ================= the spine, in the conversation =================
+     Matt's version: no plan window at all. The current step sits at the top of
+     the chat surface where he can talk to it, the rest of the plan is one click
+     away, and Ready/I'm stuck are right next to the composer. */
+  function chatPlan(el) {
+    /* Commandment 7: the plan is watched being written, in the place it will
+       live, rather than appearing finished after a spinner. */
+    if (isDrafting('plan')) {
+      const tasks = draftItems('plan') || [];
+      const title = draftHead('plan').title;
+      el.hidden = false;
+      el.innerHTML = `<div class="cp cp-drafting">
+        <div class="cp-head as-text">${title ? `<b>${esc(title)}</b>` : '<b>Mapping out your goals…</b>'}</div>
+        <div class="cp-list">${tasks.map((t, i) => `
+          <div class="cp-step"><i></i><span>${i + 1}. ${esc(t.title || '')}${t._partial && !t.detail ? caret : ''}</span></div>`).join('')}
+        </div>
+        <div class="cp-writing">${writingRow(tasks.length ? 'adding steps' : 'thinking it through')}</div>
+      </div>`;
+      return;
+    }
+    const plan = CTX.getPlan();
+    if (!plan || !plan.tasks.length) { el.innerHTML = ''; el.hidden = true; return; }
+    el.hidden = false;
+    const done = plan.tasks.filter(t => t.status === 'done').length;
+    const live = plan.tasks.find(t => t.status === 'doing');
+    const idx = live ? plan.tasks.indexOf(live) : -1;
+    const busy = CTX.isBusy && CTX.isBusy();
+    const openList = el.dataset.open === '1';
+
+    el.innerHTML = `
+      <div class="cp ${live ? '' : 'cp-idle'}">
+        <button class="cp-head" aria-expanded="${openList}">
+          <span class="cp-ring" style="--pct:${Math.round(100 * done / plan.tasks.length)}"></span>
+          <b>${esc(plan.title)}</b>
+          <em>${done} of ${plan.tasks.length}</em>
+          <svg class="cp-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6.5L8 10l4-3.5"/></svg>
+        </button>
+        <div class="cp-list" ${openList ? '' : 'hidden'}>
+          ${plan.tasks.map((t, i) => `
+            <button class="cp-step ${t.status}" data-t="${t.id}" title="${t.status === 'doing' ? 'You are here' : 'Start this step'}">
+              <i></i><span>${i + 1}. ${esc(t.title)}</span>
+            </button>`).join('')}
+        </div>
+        ${live ? `
+          <div class="cp-now">
+            <em>step ${idx + 1} of ${plan.tasks.length}</em>
+            <b>${esc(live.title)}</b>
+            ${live.detail ? `<p>${esc(live.detail)}</p>` : ''}
+            ${live.done_when ? `<div class="cp-done"><i>${icon('check')}</i><span>${esc(live.done_when)}</span></div>` : ''}
+            <div class="cp-actions">
+              <button class="cp-go" ${busy ? 'disabled' : ''}>${idx === plan.tasks.length - 1 ? 'Finish this step' : "I'm ready — next step"}</button>
+              <button class="cp-stuck" ${busy ? 'disabled' : ''}>I'm stuck</button>
+            </div>
+          </div>`
+    : `<div class="cp-now cp-empty"><b>${done === plan.tasks.length ? 'All steps done' : 'Nothing in progress'}</b>
+             <p>${done === plan.tasks.length ? 'Ask for a recap, a harder quiz, or something new.' : 'Pick a step above, or just tell me where to start.'}</p></div>`}
+      </div>`;
+
+    el.querySelector('.cp-head').onclick = () => {
+      el.dataset.open = openList ? '0' : '1';
+      chatPlan(el);
+      CTX.planResized();
+    };
+    el.querySelectorAll('.cp-step').forEach(b => b.onclick = () => {
+      const t = plan.tasks.find(x => x.id === Number(b.dataset.t));
+      if (!t || t.status === 'doing') return;
+      STEP.jump(t);
+    });
+    const go = el.querySelector('.cp-go');
+    if (go) go.onclick = () => {
+      go.disabled = true;
+      el.querySelector('.cp-now').classList.add('advancing');
+      STEP.advance(live, ok => { if (!ok) { el.querySelector('.cp-now').classList.remove('advancing'); go.disabled = false; } });
+    };
+    const stuck = el.querySelector('.cp-stuck');
+    if (stuck) stuck.onclick = () => { stuck.disabled = true; STEP.stuck(live); };
+    CTX.planResized();
+  }
 
   /* ================= sources — the notebook ================= */
   R.sources = (el, app) => {
@@ -285,7 +499,7 @@
           app.ui.adding = null;
           CTX.sourceAdded(r.source);
           emit({ desc: `added a pasted-text source "${r.source.title}" (#${r.source.id}) to the notebook. Fold it into the teaching — re-ground the plan/lesson if it changes things.`, label: `Source · ${short(r.source.title)}`, icon: 'sources' });
-        } catch (e) { alert(e.message); b.disabled = false; }
+        } catch (e) { toast(e.message); b.disabled = false; }
       } else if (a === 'save-url') {
         const url = el.querySelector('.sa-url').value.trim();
         if (!url) return;
@@ -295,7 +509,7 @@
           app.ui.adding = null;
           CTX.sourceAdded(r.source);
           emit({ desc: `added the link "${r.source.title}" (#${r.source.id}) to the notebook — its text was fetched. Fold it into the teaching.`, label: `Link · ${short(r.source.title)}`, icon: 'sources' });
-        } catch (e) { alert(e.message); b.disabled = false; b.textContent = 'Fetch & add'; }
+        } catch (e) { toast(e.message); b.disabled = false; b.textContent = 'Fetch & add'; }
       }
     });
     el.querySelectorAll('.src-del').forEach(b => b.onclick = async () => {
@@ -331,7 +545,7 @@
       return;
     }
     const art = CTX.currentArtifact('lesson');
-    if (!art) return empty(el, 'lesson', 'No lesson yet.');
+    if (!art) return empty(el, 'lesson', 'No lesson yet — tell me a topic and one gets written here.');
     const d = art.data;
     el.innerHTML = `
       <div class="lesson">
@@ -374,7 +588,7 @@
       return;
     }
     const art = CTX.currentArtifact('quiz');
-    if (!art) return empty(el, 'quiz', 'No quiz yet.');
+    if (!art) return empty(el, 'quiz', 'No quiz yet — ask me to check what stuck and it lands here.');
     const d = art.data;
     if (!app.ui || app.ui.artId !== art.id) app.ui = { artId: art.id, answers: {}, submitted: null };
     const st = app.ui;
@@ -387,31 +601,39 @@
     const r = res && res.results[i];
     if (q.type === 'mc') {
       return `<div class="qq" data-i="${i}">
-            <div class="qq-p">${i + 1}. ${esc(q.prompt)}</div>
+            <div class="qq-p">${i + 1}. ${inline(q.prompt || '')}</div>
             <div class="qq-choices">${q.choices.map((c, j) => {
         let cls = '';
         if (res) {
           if (j === r.answer_index) cls = 'right';
           else if (st.answers[i] === j && !r.correct) cls = 'wrong';
         } else if (st.answers[i] === j) cls = 'sel';
-        return `<button class="qq-c ${cls}" data-j="${j}" ${res ? 'disabled' : ''}>${esc(c)}</button>`;
+        return `<button class="qq-c ${cls}" data-j="${j}" ${res ? 'disabled' : ''}>${inline(c)}</button>`;
       }).join('')}</div>
-            ${res && r.explain ? `<div class="qq-ex ${r.correct ? 'ok' : 'no'}">${r.correct ? '✓' : '✗'} ${esc(r.explain)}</div>` : ''}
+            ${res && r.explain ? `<div class="qq-ex ${r.correct ? 'ok' : 'no'}">${r.correct ? '✓' : '✗'} ${inline(r.explain)}</div>` : ''}
           </div>`;
     }
     return `<div class="qq" data-i="${i}">
-          <div class="qq-p">${i + 1}. ${esc(q.prompt)} <em class="qq-free">free answer</em></div>
+          <div class="qq-p">${i + 1}. ${inline(q.prompt || '')} <em class="qq-free">free answer</em></div>
           <textarea class="qq-t" ${res ? 'disabled' : ''} placeholder="Your answer…">${esc(st.answers[i] || '')}</textarea>
         </div>`;
   }).join('')}
         ${!res ? '<button class="quiz-go chipbtn">Submit answers</button>' : '<div class="quiz-after">Submitted — free answers are being graded in chat.</div>'}
       </div>`;
 
+    /* the maths in a question renders the same way it does in the lesson */
+    Rich.enhance(el.querySelector('.quiz'));
+
     el.querySelectorAll('.qq-c').forEach(b => b.onclick = () => {
       if (st.submitted) return;
       const i = Number(b.closest('.qq').dataset.i);
       st.answers[i] = Number(b.dataset.j);
+      /* Repainting resets the scroll container this quiz lives in, so answering
+         question 5 used to throw the learner back to question 1 — and push
+         Submit off screen again every single time. */
+      const y = el.scrollTop;
       R.quiz(el, app);
+      el.scrollTop = y;
     });
     el.querySelectorAll('.qq-t').forEach(t => t.oninput = () => {
       st.answers[Number(t.closest('.qq').dataset.i)] = t.value;
@@ -420,11 +642,24 @@
     if (go) go.onclick = async () => {
       const answers = d.questions.map((q, i) => st.answers[i] ?? null);
       const unanswered = d.questions.filter((q, i) => answers[i] === null || answers[i] === '').length;
-      if (unanswered && !confirm(`${unanswered} unanswered — submit anyway?`)) return;
+      /* Two-stage instead of confirm(): the button says what is missing and
+         becomes the confirmation. No dialog, no focus theft. */
+      if (unanswered && go.dataset.armed !== '1') {
+        go.dataset.armed = '1';
+        go.classList.add('warn');
+        go.textContent = `${unanswered} unanswered — submit anyway?`;
+        setTimeout(() => {
+          if (go.dataset.armed !== '1') return;
+          go.dataset.armed = '';
+          go.classList.remove('warn');
+          go.textContent = 'Submit answers';
+        }, 6000);
+        return;
+      }
       go.disabled = true;
       try {
         st.submitted = await CTX.api('/api/quiz-attempt', { artifact_id: art.id, answers });
-      } catch (e) { alert(e.message); go.disabled = false; return; }
+      } catch (e) { toast(e.message); go.disabled = false; return; }
       R.quiz(el, app);
       const lines = d.questions.map((q, i) => {
         if (q.type === 'mc') {
@@ -454,7 +689,7 @@
       return;
     }
     const art = CTX.currentArtifact('flashcards');
-    if (!art) return empty(el, 'flashcards', 'No deck yet.');
+    if (!art) return empty(el, 'flashcards', 'No cards yet — ask me to make a deck from anything we have covered.');
     const d = art.data;
     if (!app.ui || app.ui.artId !== art.id) app.ui = { artId: art.id, idx: 0, flip: false, got: {}, round: 1 };
     const st = app.ui;
@@ -481,8 +716,8 @@
       <div class="fc">
         <div class="fc-topic">${esc(d.title)} · ${cards.length - remaining.length}/${cards.length} got it</div>
         <div class="fc-stage"><div class="fc-card ${st.flip ? 'flip' : ''}">
-          <div class="fc-face fc-front"><span>Q</span>${esc(c.q)}</div>
-          <div class="fc-face fc-back"><span>A</span>${esc(c.a)}</div>
+          <div class="fc-face fc-front"><span>Q</span>${inline(c.q || '')}</div>
+          <div class="fc-face fc-back"><span>A</span>${inline(c.a || '')}</div>
         </div></div>
         <div class="fc-row">
           ${st.flip
@@ -490,6 +725,7 @@
     : '<button class="chipbtn" data-a="flip">Flip</button>'}
         </div>
       </div>`;
+    Rich.enhance(el.querySelector('.fc-stage'));
     const next = () => {
       const rest = cards.map((x, i) => i).filter(i => !st.got[i] && i !== st.idx);
       if (rest.length) { st.idx = rest.find(i => i > st.idx) ?? rest[0]; }
@@ -544,7 +780,7 @@
       return;
     }
     const art = CTX.currentArtifact('deck');
-    if (!art) return empty(el, 'deck', 'No deck yet.');
+    if (!art) return empty(el, 'deck', 'No slides yet — ask for a deck of anything we have covered.');
     const d = art.data;
     const slides = d.slides || [];
     if (!slides.length) return empty(el, 'deck', 'This deck has no slides.');
@@ -621,7 +857,7 @@
       return;
     }
     const art = CTX.currentArtifact('podcast');
-    if (!art) return empty(el, 'podcast', 'No episode yet.');
+    if (!art) return empty(el, 'podcast', 'No episode yet — ask for an audio walkthrough and two hosts will talk it through.');
     const d = art.data;
     if (!app.ui || app.ui.artId !== art.id) app.ui = { artId: art.id, playing: false, line: 0 };
     const st = app.ui;
@@ -671,7 +907,7 @@
       } catch (e) {
         st.playing = false;
         R.podcast(el, app);
-        alert('Audio failed: ' + e.message);
+        toast('Audio failed: ' + e.message);
       }
     }
     const playBtn = el.querySelector('.pod-play');
@@ -691,5 +927,5 @@
     (R[id] || (el => empty(el, 'lesson', 'Unknown app')))(bodyEl, app);
   }
 
-  return { REGISTRY, icon, render, configure, md, esc };
+  return { REGISTRY, icon, render, configure, md, esc, toast, chatPlan };
 });

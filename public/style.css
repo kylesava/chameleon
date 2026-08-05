@@ -45,6 +45,85 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------------- sign-in + baseline ---------------- */
+#gate {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center;
+  background: radial-gradient(900px 600px at 50% 20%, rgba(93, 135, 255, 0.07), transparent 60%), var(--bg);
+  transition: opacity 400ms ease;
+}
+#gate.out { opacity: 0; pointer-events: none; }
+body:not(.gated):not(.booting) #gate { display: none; }
+body.booting #shell { opacity: 0; }
+#shell { transition: opacity 500ms ease; }
+#gate-card {
+  width: min(520px, 92vw); text-align: center;
+  padding: 34px 34px 30px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #181c25, #10141b);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-lg);
+  animation: rise 500ms var(--ease-out);
+}
+.gate-glyph { width: 62px; height: 62px; object-fit: contain; margin-bottom: 12px; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.55)); }
+#gate-card h1 { font-size: 21px; font-weight: 600; letter-spacing: -0.3px; line-height: 1.3; }
+#gate-card p { margin-top: 9px; font-size: 12.5px; line-height: 1.6; color: var(--text-dim); }
+/* the question is a situation; the sub-line is what we are actually asking */
+#gate-card h1 { font-size: 17px; font-weight: 500; color: var(--text-dim); line-height: 1.45; }
+.gate-sub { margin-top: 7px !important; font-size: 15px !important; font-weight: 600; color: var(--text) !important; }
+.gate-intro { font-size: 11.5px !important; color: var(--text-faint) !important; margin-top: 8px !important; }
+#gate-form { display: flex; flex-direction: column; gap: 9px; margin-top: 20px; }
+#gate-form input {
+  height: 44px; border-radius: 11px;
+  border: 1px solid var(--line-2); background: rgba(0, 0, 0, 0.3);
+  color: var(--text); font: 400 13.5px 'IBM Plex Sans', sans-serif;
+  padding: 0 14px; outline: none; text-align: center;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+#gate-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.13); }
+#gate-form button {
+  height: 44px; border: 0; border-radius: 11px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 13px 'IBM Plex Sans', sans-serif;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+#gate-form button:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+#gate-form button:disabled { opacity: 0.6; cursor: default; }
+.gate-err { font-size: 12px; color: var(--bad); margin-top: 2px; animation: rise 240ms var(--ease-out); }
+.gate-hint { margin-top: 16px; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); letter-spacing: 0.6px; }
+.gate-progress { display: flex; gap: 6px; justify-content: center; margin-bottom: 16px; }
+.gate-progress i { width: 22px; height: 3px; border-radius: 2px; background: var(--line-2); transition: background 300ms ease, width 300ms var(--ease-out); }
+.gate-progress i.done { background: var(--good); }
+.gate-progress i.on { background: var(--accent); width: 34px; }
+.gate-options { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+.gate-opt {
+  text-align: left; padding: 13px 15px;
+  border: 1px solid var(--line-2); border-radius: 13px;
+  background: var(--fill-1); color: var(--text); cursor: pointer;
+  transition: all 160ms ease;
+  animation: rise 380ms var(--ease-out) backwards;
+}
+.gate-options .gate-opt:nth-child(2) { animation-delay: 50ms; }
+.gate-options .gate-opt:nth-child(3) { animation-delay: 100ms; }
+.gate-options .gate-opt:nth-child(4) { animation-delay: 150ms; }
+.gate-opt b { display: block; font-size: 13.5px; font-weight: 600; }
+.gate-opt span { display: block; font-size: 11.5px; color: var(--text-faint); margin-top: 2px; line-height: 1.45; }
+.gate-opt:hover { border-color: var(--accent); background: rgba(93, 135, 255, 0.06); transform: translateY(-1px); }
+.gate-opt.on { border-color: var(--accent); background: rgba(93, 135, 255, 0.12); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.08); }
+.gate-opt.on b::after { content: ' ✓'; color: var(--accent-2); }
+.gate-actions { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
+.gate-actions button {
+  border: 1px solid var(--line-2); border-radius: 9px; background: transparent;
+  color: var(--text-dim); font: 500 11.5px 'IBM Plex Sans', sans-serif;
+  padding: 8px 16px; cursor: pointer; transition: all 150ms ease;
+}
+.gate-actions button:hover { color: var(--text); border-color: var(--accent); }
+.gate-spin {
+  width: 26px; height: 26px; margin: 22px auto 4px; border-radius: 50%;
+  border: 2px solid var(--line-2); border-top-color: var(--accent);
+  animation: spin 900ms linear infinite;
+}
+
 #aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 #aurora::before {
   content: ''; position: absolute; inset: 0;
@@ -138,6 +217,116 @@ body::after {
   transition: opacity 180ms ease, transform 220ms var(--ease-spring);
 }
 #appsmenu.open #apps-pop { opacity: 1; transform: none; pointer-events: auto; }
+
+/* how you like to work — the baseline stays changeable, and the system says
+   out loud what it has since concluded from watching */
+#usermenu { position: relative; }
+#user-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: linear-gradient(150deg, var(--accent), #7b5cff);
+  color: #fff; cursor: pointer;
+  font: 600 12px 'IBM Plex Sans', sans-serif;
+  display: grid; place-items: center;
+  transition: all 150ms ease;
+}
+#user-btn:hover, #usermenu.open #user-btn { filter: brightness(1.12); transform: translateY(-1px); }
+/* A settings sheet, not a popover. "Customise everything" only works if there
+   is room for everything — this slides in from the right, is full height, and
+   scrolls with its header and footer pinned. */
+#user-pop {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 90;
+  width: min(360px, 92vw); padding: 18px 18px 14px;
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #161a22, #10141b);
+  border-left: 1px solid var(--line);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.5);
+  border-radius: 0;
+  opacity: 0; transform: translateX(16px); pointer-events: none;
+  transition: opacity 220ms ease, transform 340ms var(--ease-out);
+}
+body.settings-open #user-pop { opacity: 1; transform: none; pointer-events: auto; }
+/* a scrim, so the sheet reads as a layer over the workspace rather than a
+   panel competing with it */
+#user-scrim {
+  position: fixed; inset: 0; z-index: 89;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0; pointer-events: none; transition: opacity 220ms ease;
+}
+body.settings-open #user-scrim { opacity: 1; pointer-events: auto; }
+.up-head {
+  flex: 0 0 auto; display: flex; align-items: baseline; gap: 8px;
+  padding-bottom: 12px; margin-bottom: 2px; border-bottom: 1px solid var(--line);
+}
+.up-head b { font-size: 15px; }
+.up-head span { font: 500 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; color: var(--text-faint); }
+/* the fade says "there is more below" without needing a scrollbar */
+.up-body { position: relative; flex: 1; min-height: 0; display: flex; }
+.up-body::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 24px;
+  background: linear-gradient(to bottom, rgba(16, 20, 27, 0), #10141b);
+  pointer-events: none;
+}
+.up-scroll {
+  flex: 1; min-height: 0; overflow-y: auto;
+  margin: 0 -6px; padding: 0 6px 18px;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+.up-group {
+  font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px;
+  color: var(--accent-2); margin: 16px 0 4px; padding-top: 12px; border-top: 1px solid var(--line);
+}
+.up-scroll > .up-group:first-child { border-top: 0; padding-top: 0; margin-top: 12px; }
+.up-row { padding: 9px 0 6px; }
+.up-row em {
+  display: block; font-style: normal;
+  font: 500 10px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.9px;
+  color: var(--text-faint); margin-bottom: 6px;
+}
+.up-opts { display: flex; gap: 4px; }
+.up-opts button {
+  flex: 1; padding: 7px 4px;
+  border: 1px solid var(--line-2); border-radius: 7px;
+  background: transparent; color: var(--text-dim); cursor: pointer;
+  font: 500 11px 'IBM Plex Sans', sans-serif;
+  transition: all 140ms ease;
+}
+.up-opts button:hover { color: var(--text); border-color: var(--accent); }
+.up-opts button.on { background: rgba(93, 135, 255, 0.16); border-color: var(--accent); color: var(--text); }
+.up-note { display: block; font-size: 10px; color: var(--text-faint); margin-top: 6px; line-height: 1.5; }
+/* which windows the agent may build in at all */
+.up-apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.up-app {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 4px; border-radius: 10px;
+  border: 1px solid var(--line-2); background: transparent;
+  color: var(--text-faint); cursor: pointer;
+  font: 500 10px 'IBM Plex Sans', sans-serif;
+  transition: all 150ms ease;
+}
+.up-app svg { width: 15px; height: 15px; }
+.up-app:hover { color: var(--text); border-color: var(--accent); }
+.up-app.on { color: var(--text); border-color: var(--accent); background: rgba(93, 135, 255, 0.14); }
+.up-app:not(.on) { opacity: 0.4; }
+.up-learned {
+  margin-top: 16px; padding: 10px 11px;
+  border-radius: 9px; background: rgba(46, 204, 139, 0.07); border: 1px solid rgba(46, 204, 139, 0.18);
+}
+.up-learned em {
+  display: block; font-style: normal;
+  font: 500 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--good); margin-bottom: 4px;
+}
+.up-learned span { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+.up-foot { flex: 0 0 auto; display: flex; gap: 7px; padding-top: 12px; border-top: 1px solid var(--line); }
+.up-foot button {
+  flex: 1; padding: 9px; border-radius: 8px;
+  border: 1px solid var(--line); background: transparent; color: var(--text-faint);
+  font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: all 140ms ease;
+}
+.up-retake:hover { color: var(--accent-2); border-color: var(--accent); background: rgba(93, 135, 255, 0.06); }
+.up-out:hover { color: var(--bad); border-color: var(--bad); background: rgba(220, 47, 106, 0.07); }
 .ap-row {
   display: flex; align-items: center; gap: 9px; width: 100%;
   border: 0; background: transparent; cursor: pointer;
@@ -162,7 +351,7 @@ body.chat-center #workspace { opacity: 0; pointer-events: none; }
 /* a side dock takes its own column; minimised gives the canvas nearly everything */
 body.place-left  #workspace { left: calc(var(--dock-side-w) + 26px); right: 14px; bottom: 14px; }
 body.place-right #workspace { right: calc(var(--dock-side-w) + 26px); left: 14px; bottom: 14px; }
-body.place-mini  #workspace { bottom: 74px; }
+body.place-mini  #workspace { bottom: 110px; }  /* clears the real pill, which wraps to two lines */
 #canvas {
   position: relative; width: 100%; height: 100%;
   background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.3px);
@@ -243,7 +432,8 @@ body.place-mini  #workspace { bottom: 74px; }
 .tile-ico { width: 14px; height: 14px; color: hsl(var(--h) 75% 68%); }
 .tile-ico svg { width: 14px; height: 14px; display: block; }
 .tile-name { font: 500 11.5px 'IBM Plex Sans', sans-serif; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-size { font: 500 8.5px 'IBM Plex Mono', monospace; color: var(--text-faint); border: 1px solid var(--line); border-radius: 5px; padding: 1.5px 5px; text-transform: uppercase; }
+.tile-size { display: none; }
+.tile-size--unused { font: 500 8.5px 'IBM Plex Mono', monospace; color: var(--text-faint); border: 1px solid var(--line); border-radius: 5px; padding: 1.5px 5px; text-transform: uppercase; }
 .tile-actions { margin-left: auto; display: flex; gap: 2px; opacity: 0; transform: translateX(4px); transition: all 200ms ease; }
 .tile:hover .tile-actions { opacity: 1; transform: none; }
 .tbtn {
@@ -256,6 +446,14 @@ body.place-mini  #workspace { bottom: 74px; }
 .tbtn:hover { background: var(--fill-2); color: var(--text); }
 .tbtn.close:hover { background: rgba(220, 47, 106, 0.1); color: var(--bad); }
 .tile-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+/* Content used to stop dead at the tile edge, mid-word, with nothing to say
+   there was more below. A fade reads as "keep scrolling" instead of "broken". */
+.tile-body::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 26px;
+  background: linear-gradient(to bottom, rgba(16, 20, 27, 0), #10141b);
+  opacity: 0.9; pointer-events: none; z-index: 1;
+}
+.tile-body:has(.app-empty)::after { content: none; }
 
 .tile.rz { cursor: nwse-resize; }
 .tile.rz .tile-head { cursor: nwse-resize; }
@@ -561,6 +759,9 @@ body.dragging { user-select: none; }
   font: 500 11px 'IBM Plex Sans', sans-serif; color: var(--accent-2);
 }
 body.has-status #chat-status { display: flex; animation: rise var(--t-in) var(--ease-out); }
+/* It is a strip of the chat surface, so it must not stray outside the width
+   the canvas has already reserved for that surface. */
+#chat-status { position: relative; z-index: 2; }
 body.chat-center #chat-status { align-self: center; }
 /* inside the fused card it needs no shell of its own */
 #chatdock.fused #chat-status { background: var(--fill-1); border-color: var(--line); box-shadow: none; backdrop-filter: none; margin-left: 2px; }
@@ -621,6 +822,10 @@ body.acting #chatdock.fused {
 }
 body.acting #chat-log-wrap,
 body.chat-collapsed #chat-log-wrap { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+/* the row collapses to 0fr but the log's own padding survives it, leaving the
+   card ~26px taller than "closed" */
+body.acting #chat-log,
+body.chat-collapsed #chat-log { padding-top: 0; padding-bottom: 0; }
 body.chat-center #chat-log-wrap,
 body:not(.has-msgs) #chat-log-wrap { display: none; }
 
@@ -732,7 +937,12 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 .chipbtn.deep:hover { background: rgba(124, 58, 237, 0.08); }
 
 /* ---------------- plan ---------------- */
-.plan { height: 100%; display: flex; flex-direction: column; padding: 10px 12px 12px; }
+.plan { height: 100%; display: flex; flex-direction: column; padding: 10px 12px 12px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+/* In a short tile the step card is the thing that must survive: the trail
+   below it can scroll away, but "I'm ready" can never end up under the edge
+   with no way to reach it. */
+.plan-now { flex: 0 0 auto; }
+.plan-head { flex: 0 0 auto; }
 .plan-head { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .plan-ring { width: 40px; height: 40px; flex: 0 0 auto; }
 .plan-ring text { fill: var(--text); font: 600 9px 'IBM Plex Mono', monospace; text-anchor: middle; }
@@ -759,6 +969,79 @@ body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; 
 }
 .plan-live b { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
 .plan-live span { display: block; font-size: 10.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
+
+/* ---- the current step ----
+   The one thing the learner is doing, what finished looks like, and the button
+   that moves them on. Everything else in this window is context for it. */
+.plan-now {
+  margin: 10px 0 4px; padding: 11px 12px 10px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(93, 135, 255, 0.14), rgba(93, 135, 255, 0.04));
+  border: 1px solid rgba(93, 135, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.05), 0 6px 18px rgba(0, 0, 0, 0.3);
+  animation: msg-in 380ms var(--ease-spring);
+}
+.plan-now.idle {
+  background: var(--fill-1); border-color: var(--line-2); box-shadow: none;
+}
+.plan-now.advancing { animation: stepDone 460ms var(--ease-out) forwards; }
+@keyframes stepDone {
+  40% { transform: scale(1.015); border-color: var(--good); box-shadow: 0 0 0 4px rgba(46, 204, 139, 0.16); }
+  100% { transform: translateY(-6px) scale(0.99); opacity: 0.35; }
+}
+.pn-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.pn-top em {
+  display: flex; align-items: center; gap: 6px;
+  font: 600 8.5px 'IBM Plex Mono', monospace; font-style: normal;
+  text-transform: uppercase; letter-spacing: 1.3px; color: var(--accent-2);
+}
+.pn-top em::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-2); animation: pulse 1.6s ease-in-out infinite;
+}
+.pn-apps { display: flex; gap: 5px; opacity: 0.75; }
+.pn-apps i { display: block; width: 12px; height: 12px; color: var(--text-dim); }
+.pn-apps svg { width: 100%; height: 100%; }
+.plan-now > b { display: block; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.pn-do { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
+/* what "finished" means — the thing that stops the plan being guesswork */
+.pn-done {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin-top: 8px; padding: 6px 8px;
+  border-radius: 8px; background: rgba(46, 204, 139, 0.08);
+  border: 1px solid rgba(46, 204, 139, 0.2);
+}
+.pn-done i { flex: 0 0 auto; width: 11px; height: 11px; margin-top: 2px; color: var(--good); }
+.pn-done svg { width: 100%; height: 100%; stroke-width: 2; }
+.pn-done span { font-size: 10.5px; color: var(--text-dim); line-height: 1.45; }
+.pn-actions { display: flex; gap: 6px; margin-top: 10px; }
+.pn-go {
+  flex: 1; height: 30px; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 11px 'IBM Plex Sans', sans-serif;
+  transition: filter 150ms ease, transform 150ms ease, opacity 150ms ease;
+}
+.pn-go:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+.pn-go:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+.pn-stuck {
+  height: 30px; padding: 0 11px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text-dim);
+  font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: all 150ms ease;
+}
+.pn-stuck:hover:not(:disabled) { color: var(--warn); border-color: var(--warn); background: rgba(232, 165, 71, 0.08); }
+.pn-go:disabled, .pn-stuck:disabled { opacity: 0.45; cursor: default; }
+.pt-start {
+  flex: 0 0 auto; width: 19px; height: 19px; margin-top: 1px;
+  border: 0; background: transparent; color: var(--text-faint);
+  border-radius: 5px; cursor: pointer; opacity: 0;
+  display: grid; place-items: center;
+  transition: opacity 150ms ease, background 140ms ease, color 140ms ease;
+}
+.pt-start svg { width: 11px; height: 11px; fill: currentColor; stroke: none; }
+.plan-task:hover .pt-start { opacity: 1; }
+.pt-start:hover { background: rgba(93, 135, 255, 0.14); color: var(--accent-2); }
+.plan-task.done .pt-start { display: none; }
 
 .plan-body { flex: 1; overflow-y: auto; padding-top: 8px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 .plan-stage { font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-faint); margin: 7px 0 3px; }
@@ -1223,3 +1506,169 @@ pre.code[data-lang]::after {
 }
 .pod-ln.hA em { color: #ffa8d0; border: 1px solid rgba(255, 105, 180, 0.35); }
 .pod-ln.hB em { color: #8caaff; border: 1px solid rgba(93, 135, 255, 0.4); }
+
+/* ---------------- toast ----------------
+   The app's own way of saying something went wrong. Never a native alert():
+   that steals focus and reads as a browser error rather than as the product. */
+#toast {
+  position: fixed; z-index: 300;
+  left: 50%; bottom: 26px;
+  transform: translate(-50%, 14px);
+  max-width: min(460px, 88vw);
+  padding: 10px 16px;
+  border-radius: 11px;
+  background: var(--panel); border: 1px solid var(--line-2);
+  box-shadow: var(--sh-lg);
+  font: 500 12px 'IBM Plex Sans', sans-serif; color: var(--text);
+  opacity: 0; pointer-events: none;
+  transition: opacity 220ms ease, transform 320ms var(--ease-spring);
+}
+#toast.on { opacity: 1; transform: translate(-50%, 0); }
+#toast.bad { border-color: rgba(220, 47, 106, 0.5); }
+#toast.bad::before { content: '⚠ '; color: var(--bad); }
+#toast.good { border-color: rgba(46, 204, 139, 0.5); }
+#toast.good::before { content: '✓ '; color: var(--good); }
+
+/* adding a step, in the list rather than in a dialog */
+.plan-new { display: flex; gap: 6px; margin-top: 6px; animation: rise var(--t-in) var(--ease-out); }
+.plan-new input {
+  flex: 1; min-width: 0; height: 30px;
+  border: 1px solid var(--accent); border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3); color: var(--text);
+  font: 400 11.5px 'IBM Plex Sans', sans-serif; padding: 0 10px; outline: none;
+}
+.plan-new button {
+  flex: 0 0 auto; height: 30px; padding: 0 12px;
+  border: 0; border-radius: 8px; background: var(--accent); color: #fff;
+  font: 600 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+}
+.plan-new button:hover { filter: brightness(1.1); }
+
+/* submitting a quiz with blanks asks in place */
+.quiz-go.warn { border-color: var(--warn); color: var(--warn); background: rgba(232, 165, 71, 0.1); }
+
+/* The minimised pill wrapped onto two lines, which is why it was taller than
+   the space the canvas reserved for it. */
+body.place-mini #chat-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Flashcard faces render markdown now, so they inherit the link/code colours
+   from the lesson. The card is not a document — its text is the content. */
+.fc-face code { color: inherit; background: rgba(255, 255, 255, 0.07); }
+.fc-face a { color: inherit; text-decoration: underline; }
+.fc-face strong { color: inherit; }
+
+/* ---------------- the spine, in the conversation ----------------
+   Matt's version of the plan: no window, no second thing to look at. It sits
+   at the top of the chat card, above the transcript, and stays put while the
+   history comes and goes — it is structure, not conversation. */
+#chat-plan { display: none; }
+body.plan-in-chat #chat-plan:not([hidden]) { display: block; margin-bottom: 9px; }
+.cp {
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(93, 135, 255, 0.13), rgba(93, 135, 255, 0.04));
+  border: 1px solid rgba(93, 135, 255, 0.4);
+  overflow: hidden;
+  animation: msg-in 340ms var(--ease-spring);
+}
+.cp-head {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 9px 11px; border: 0; background: transparent; cursor: pointer;
+  color: var(--text); text-align: left;
+  transition: background 140ms ease;
+}
+.cp-head:hover { background: rgba(255, 255, 255, 0.04); }
+.cp-head b { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-head em { font: 500 9.5px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); }
+.cp-chev { width: 13px; height: 13px; color: var(--text-faint); transition: transform 240ms var(--ease-out); }
+.cp-head[aria-expanded="true"] .cp-chev { transform: rotate(180deg); }
+/* a progress dial small enough to be punctuation rather than a chart */
+.cp-ring {
+  flex: 0 0 auto; width: 15px; height: 15px; border-radius: 50%;
+  background: conic-gradient(var(--good) calc(var(--pct) * 1%), rgba(255, 255, 255, 0.11) 0);
+  position: relative;
+}
+.cp-ring::after {
+  content: ''; position: absolute; inset: 3.5px; border-radius: 50%;
+  background: #171b23;
+}
+.cp-list { padding: 2px 8px 8px; display: flex; flex-direction: column; gap: 1px; }
+.cp-list[hidden] { display: none; }   /* [hidden] loses to any author display rule */
+.cp-step {
+  display: flex; align-items: flex-start; gap: 8px; width: 100%;
+  padding: 6px 8px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text-dim); cursor: pointer;
+  font: 400 11.5px 'IBM Plex Sans', sans-serif; text-align: left; line-height: 1.45;
+  transition: background 140ms ease, color 140ms ease;
+  animation: rise 300ms var(--ease-out) backwards;
+}
+.cp-step:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+.cp-step i {
+  flex: 0 0 auto; width: 11px; height: 11px; margin-top: 3px;
+  border-radius: 50%; border: 1.5px solid var(--line-2);
+  display: grid; place-items: center;
+}
+.cp-step.doing { color: var(--text); cursor: default; }
+.cp-step.doing i { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.14); }
+.cp-step.doing i::after {
+  content: ''; width: 4px; height: 4px; border-radius: 50%; background: var(--accent-2);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.cp-step.done { color: var(--text-faint); }
+.cp-step.done span { text-decoration: line-through; text-decoration-color: var(--line-2); }
+.cp-step.done i { border-color: var(--good); background: var(--good); }
+.cp-step.done i::after { content: '✓'; font-size: 8px; font-weight: 700; color: #0a0c10; line-height: 1; }
+
+.cp-now { padding: 10px 12px 11px; border-top: 1px solid rgba(93, 135, 255, 0.22); }
+.cp-now.advancing { animation: stepDone 460ms var(--ease-out) forwards; }
+.cp-now > em {
+  display: flex; align-items: center; gap: 6px;
+  font: 600 8.5px 'IBM Plex Mono', monospace; font-style: normal;
+  text-transform: uppercase; letter-spacing: 1.3px; color: var(--accent-2);
+  margin-bottom: 4px;
+}
+.cp-now > em::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-2); animation: pulse 1.6s ease-in-out infinite;
+}
+.cp-now > b { display: block; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.cp-now > p { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
+.cp-empty { border-top: 0; }
+.cp-empty > b { color: var(--text-dim); font-weight: 500; }
+.cp-done {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin-top: 8px; padding: 6px 8px;
+  border-radius: 8px; background: rgba(46, 204, 139, 0.08);
+  border: 1px solid rgba(46, 204, 139, 0.2);
+}
+.cp-done i { flex: 0 0 auto; width: 11px; height: 11px; margin-top: 2px; color: var(--good); }
+.cp-done svg { width: 100%; height: 100%; stroke-width: 2; }
+.cp-done span { font-size: 10.5px; color: var(--text-dim); line-height: 1.45; }
+.cp-actions { display: flex; gap: 6px; margin-top: 10px; }
+.cp-go {
+  flex: 1; height: 31px; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 11.5px 'IBM Plex Sans', sans-serif;
+  transition: filter 150ms ease, transform 150ms ease, opacity 150ms ease;
+}
+.cp-go:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+.cp-go:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+.cp-stuck {
+  height: 31px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text-dim);
+  font: 500 11.5px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: all 150ms ease;
+}
+.cp-stuck:hover:not(:disabled) { color: var(--warn); border-color: var(--warn); background: rgba(232, 165, 71, 0.08); }
+.cp-go:disabled, .cp-stuck:disabled { opacity: 0.45; cursor: default; }
+/* the spine survives the transcript being tucked away — it is not conversation */
+body.plan-in-chat.acting #chat-plan:not([hidden]),
+body.plan-in-chat.chat-collapsed #chat-plan:not([hidden]) { display: block; }
+/* in the minimised pill there is no room for it */
+body.place-mini #chat-plan { display: none !important; }
+
+/* the spine writing itself, in the conversation */
+.cp-drafting .cp-head.as-text { cursor: default; padding-bottom: 4px; }
+.cp-drafting .cp-head.as-text:hover { background: transparent; }
+.cp-drafting .cp-step { cursor: default; }
+.cp-drafting .cp-step:hover { background: transparent; color: var(--text-dim); }
+.cp-writing { padding: 2px 12px 10px; }

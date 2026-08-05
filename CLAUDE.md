@@ -58,8 +58,66 @@ against them; when a feature conflicts with a commandment, the commandment wins.
 | 3 | The `narrate` tool (`server/tools.js`) → `narrateInTile()` overlay + mirrored into `message` rows with `kind='narration'`. |
 | 4 | `body.busy` turns the send button into the stop button (`style.css`); `Chat.stop()` aborts the fetch and fast-forwards the queue. |
 | 5 | `#chatdock.fused` is one card holding history + composer; `body.acting` collapses the history away while the queue plays, and `#chat-collapse` hides it on demand. Placement (`place-center/left/right/mini`) moves the whole fused surface — drag the grip, or `?place=` for demo links. |
-| 6 | `plan` + `plan_task` tables (stages = parallel/sequential), the `update_plan` / `set_task_status` tools, and the `plan` app. The agent is told to advance statuses itself as it teaches; the tile leads with the live goal. |
+| 6 | `plan` + `plan_task` tables (stages = parallel/sequential; `done_when` + `apps` per step), the `update_plan` / `complete_step` / `set_task_status` tools, and the `plan` app. The tile leads with a **current-step card** (`.plan-now`): what you are doing, what finished looks like, and "I'm ready" / "I'm stuck". Whether the agent waits on that button is the learner's `checkinEvery` setting, not a global rule. |
 | 7 | `server/agent.js` emits `tool_start` the instant a tool call begins and `draft` events parsed from the still-streaming tool input (`draftScan`). The client opens the target tile immediately with an ephemeral status and renders items as they arrive — see `state.draft` in `public/main.js`. |
+
+## Pace is a property of the learner, not of the product
+
+Commandments 1, 2 and 6 pull in opposite directions for different people. One
+founder wants one window and a confirmation before every step; the other wants
+four windows and no interruptions. **That is not a disagreement to arbitrate —
+it is a setting to model.** [docs/ADAPTIVE.md](docs/ADAPTIVE.md) is the design;
+the short version:
+
+- **Sign-in is real.** `server/auth.js` (scrypt + HMAC-signed cookie), two
+  seeded accounts, and every journey, profile and signal is scoped to a user.
+  `mine(sid)` in `server/api.js` guards every route that takes a journey id.
+- **A five-question baseline** (`public/gate.js`) runs once, before the
+  workspace ever appears. Every question is a **concrete situation** with a real
+  example ("Chameleon has written a lesson and a quiz — what should it put on
+  screen?"), never an abstract setting. It deliberately does **not** ask how
+  much someone already knows: nobody is uniformly a beginner or an expert, so
+  `priorKnowledge` is a starting default the agent overrides per topic, not a
+  fact about the person.
+- **The plan has two homes, and which one is a setting** (`planPlace`). In the
+  conversation (`#chat-plan`, `Apps.chatPlan`) it is something you talk to —
+  the current step sits above the composer, the steps are clickable triggers,
+  and Ready / I'm stuck are next to the input. In a window it is the `plan` tile
+  beside the work. Matt keeps it in chat and gets no plan window at all; Kyle
+  keeps it in a window alongside a lesson and a quiz. Enforced: with the spine
+  in chat, `update_plan` opens no tile and `layout {open: plan}` is refused.
+- **They can coach the UX in chat and it sticks.** The `remember_preference`
+  tool writes to the same `stated` profile the settings sheet edits, so "stop
+  opening two things at once" and clicking *One* are the same act. It applies
+  from the next turn, emits a `preference` event so the UI updates in the same
+  breath as the acknowledgement, and lands in the audit trail. A preference the
+  learner has to repeat is one we failed to record.
+- **The profile has three layers** (`server/profile.js`): `stated` (the
+  baseline), `observed` (what they actually do), and `effective` — the blend,
+  weighted by how much evidence we have. Only `effective` is ever read at
+  runtime, and it crosses the wire in exactly one shape (`shapeProfile`).
+- **Pacing is enforced, not requested.** `maxApps` is a hard budget applied in
+  `makeExecutors` (`server/tools.js`); an over-budget `layout` open is refused
+  with a message the model can act on. A prompt asking for one window at a time
+  is a wish; this is the guarantee. The plan window is exempt — it is the spine,
+  not a thing to work in.
+- **Every step must say what finished looks like.** `update_plan` **refuses** a
+  plan whose steps have no `done_when`. A warning would arrive after the learner
+  had already been shown a vague plan.
+- **The profile learns.** `POST /api/signal` folds behaviour in: closing a
+  window within 15s of it appearing, pressing "I'm stuck", pressing "I'm ready",
+  quiz scores, which windows get used. Nothing moves on two data points —
+  `confidenceOf` needs roughly a dozen completed steps before observation
+  outweighs what they told us.
+- **Everything is changeable, from one sheet.** The avatar opens a full-height
+  settings sheet (`#user-pop`, at body level — the topbar's `backdrop-filter`
+  makes it a containing block, which clips a `position: fixed` panel inside it).
+  It holds pacing, **where the agent speaks** (`voice`: in the windows / both /
+  in chat), how much it says in chat (`chatter`), depth, visual density
+  (`visuals`), assumed background, and **which windows it may build at all**
+  (`apps`). Plus "Retake the baseline". Anything that can be enforced is —
+  `allowedApps` is checked in `makeExecutors` before anything is written, not
+  just asked for in the prompt.
 
 ## Debugging a hosted session
 
@@ -77,6 +135,14 @@ workspace frozen with nothing to look at afterwards.
 
 ## Checking your work
 
+- `node --test "test/*.test.js"` runs everything. The `ui-*.test.js` files drive
+  a **real headless Chrome** through `test/drive.js`, a zero-dependency CDP
+  client — it clicks with real mouse events, so it catches z-index and
+  pointer-events bugs that a synthetic `.click()` sails past. `page.topAt(sel)`
+  proves nothing is covering a control; `page.overflowing()` finds anything
+  spilling out of the viewport; `page.errors` fails the test on any uncaught
+  browser exception. `serve()` gives each test its own port and throwaway
+  database, so they can run in parallel.
 - `public/_states.html` renders **every app in every state** — populated, empty,
   drafting, degraded — side by side. Open it (or screenshot it headless) after
   touching any renderer; most visual regressions show up there in one glance.
