@@ -214,6 +214,12 @@ async function newPage(browser, port, url, size) {
     /* What element is actually on top at this point? Use it to prove nothing
        is covering a control. */
     async topAt(sel) {
+      /* Scroll it into view first, the way click() does — a control below the
+         fold of a scrolling panel is reachable, not covered. */
+      await evalIn(`(() => { const e = document.querySelector(${JSON.stringify(sel)});
+        if (!e) return; const r = e.getBoundingClientRect();
+        if (r.top < 0 || r.bottom > innerHeight) e.scrollIntoView({ block: 'center' }); })()`, false);
+      await sleep(120);
       return evalIn(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null;
         const r = e.getBoundingClientRect();
         const t = document.elementFromPoint(Math.round(r.x + r.width/2), Math.round(r.y + r.height/2));

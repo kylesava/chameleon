@@ -813,6 +813,12 @@
         const stack = (form ? form.offsetHeight : 44)
           + (plan && !plan.hidden ? plan.offsetHeight + 9 : 0);
         height -= Math.min(Math.round(stack) + 12, Math.round(r.height * 0.6));
+        /* Once apps exist the conversation holds a column on the left and
+           stays there. Windows get what is left of the canvas. */
+        const talk = document.getElementById('chat-log-wrap');
+        if (state.apps.length && talk && !document.body.classList.contains('talk-folded')) {
+          width -= Math.round(talk.getBoundingClientRect().width) + 22;
+        }
       }
       else if (place === 'left' || place === 'right') width -= DOCK_W + 12;
       /* The centred card floats over the canvas, and it is no longer a fixed
@@ -863,10 +869,18 @@
     let maxX = 0;
     result.placed.forEach(p => { maxX = Math.max(maxX, p.x + p.w); });
     const anyPinned = result.placed.some(p => p.pinned);
-    /* With the conversation on the canvas the workspace already uses the full
-       width, so centring the grid on top of it pushes tiles off the right. */
-    const offset = (!anyPinned && maxX && !document.body.classList.contains('canvas-chat'))
-      ? Math.max(0, (m.width - (px({ x: maxX, y: 0 }) - GAP)) / 2) : 0;
+    /* With the conversation on the canvas the grid is not centred — it starts
+       where the conversation ends. Narrowing the tiles without also moving them
+       across just drew them underneath it. */
+    let offset = 0;
+    if (document.body.classList.contains('canvas-chat')) {
+      const talk = document.getElementById('chat-log-wrap');
+      if (state.apps.length && talk && !document.body.classList.contains('talk-folded')) {
+        offset = Math.round(talk.getBoundingClientRect().right) - 14 + 8;
+      }
+    } else if (!anyPinned && maxX) {
+      offset = Math.max(0, (m.width - (px({ x: maxX, y: 0 }) - GAP)) / 2);
+    }
 
     const placedIds = new Set(result.placed.map(p => p.id));
     for (const [id, t] of tiles) {
@@ -1271,6 +1285,20 @@
     planPlace: () => (state.profile || {}).planPlace,
     endTurn: () => enqueue({ t: '_end' }),
   };
+
+  /* The conversation folds into the left wall when an app needs the whole
+     canvas, and the tab brings it back. Folding is remembered per browser so
+     it does not spring open again on the next turn. */
+  const talkTab = document.getElementById('talk-tab');
+  const foldTalk = on => {
+    document.body.classList.toggle('talk-folded', !!on);
+    try { localStorage.setItem('cham_talk_folded', on ? '1' : '0'); } catch {}
+    relayout();
+  };
+  if (localStorage.getItem('cham_talk_folded') === '1') document.body.classList.add('talk-folded');
+  talkTab.onclick = () => foldTalk(false);
+  /* an app taken to full width is asking for the whole canvas */
+  document.addEventListener('chameleon:fullscreen', e => foldTalk(!!(e.detail && e.detail.on)));
 
   /* Annotations: mark anything in any app and talk to the agent about it. */
   Annotate.configure({

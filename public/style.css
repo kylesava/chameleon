@@ -1975,15 +1975,17 @@ body.acting #pinned-btn { display: none; }
    comfortable reading column rather than a 400px gutter. When apps open it
    yields the middle and retreats to its dock — the composer never moves
    between the two, it just narrows. */
-body.agent-surface:not(.has-apps) #chatdock {
+/* superseded by canvas-chat: the dock spans the stage and the columns inside
+   it do the positioning */
+body.agent-surface:not(.canvas-chat):not(.has-apps) #chatdock {
   left: 50% !important; right: auto !important;
   width: min(720px, 92vw) !important;
   transform: translateX(-50%);
   top: 64px !important; bottom: 18px !important;
   justify-content: flex-end !important;
 }
-body.agent-surface:not(.has-apps) #chat-log { font-size: 14.5px; }
-body.agent-surface:not(.has-apps) #chat-bar { display: none !important; }
+body.agent-surface:not(.canvas-chat):not(.has-apps) #chat-log { font-size: 14.5px; }
+body.agent-surface:not(.canvas-chat):not(.has-apps) #chat-bar { display: none !important; }
 body.agent-surface #chatdock { transition: width 480ms var(--ease-out), left 480ms var(--ease-out), transform 480ms var(--ease-out); }
 
 /* ================= THE CANVAS IS THE CHAT =================
@@ -2092,3 +2094,60 @@ body.canvas-chat #chat-form,
 body.canvas-chat #chat-plan,
 body.canvas-chat #pinned-btn,
 body.canvas-chat #chat-status { z-index: 5; }
+
+/* ================= where the conversation lives =================
+   The transcript's position is not a preference — it follows the work:
+   centred when there is nothing else on screen, pinned to the left the moment
+   an app opens, and there until the last one closes. It is always on the
+   background. The composer stays independently dockable.
+
+   The hero is part of the surface and must be clickable — the dock is
+   click-through so the canvas beneath stays reachable, and every interactive
+   child has to opt back in. Missing it here is why the suggestions did
+   nothing. */
+body.canvas-chat #hero { pointer-events: auto; }
+
+/* nothing open: the conversation owns the middle */
+body.canvas-chat:not(.has-apps) #chat-log-wrap,
+body.canvas-chat:not(.has-apps) #hero {
+  margin-left: auto; margin-right: auto;
+  width: min(760px, 84vw);
+}
+body.canvas-chat:not(.has-apps).chat-center #chatdock { justify-content: center; }
+body.canvas-chat:not(.has-apps).chat-center #chat-log-wrap { flex: 0 0 auto; }
+
+/* an app opens: it moves left and stays there while any app is open */
+body.canvas-chat.has-apps #chat-log-wrap {
+  position: absolute; left: 18px; top: 14px;
+  width: min(360px, 30vw); height: auto; max-height: calc(100% - 150px);
+  margin: 0; flex: none;
+}
+body.canvas-chat.has-apps #chat-log { padding: 0 4px; font-size: 13px; }
+body.canvas-chat #chat-log-wrap {
+  transition: left 460ms var(--ease-out), width 460ms var(--ease-out),
+    top 460ms var(--ease-out), opacity 320ms ease;
+}
+
+/* folded away — for a full-screen app, or because they asked. It becomes a tab
+   on the left wall; clicking it brings the conversation back. */
+body.canvas-chat.talk-folded #chat-log-wrap { opacity: 0; pointer-events: none; }
+#talk-tab {
+  position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+  z-index: 6; display: none;
+  width: 34px; padding: 12px 0 14px;
+  border: 1px solid var(--line-2); border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: linear-gradient(180deg, #1b202a, #141922);
+  box-shadow: 6px 0 20px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  display: none; flex-direction: column; align-items: center; gap: 8px;
+  transition: width 180ms ease, background 180ms ease;
+}
+body.canvas-chat.talk-folded #talk-tab { display: flex; }
+#talk-tab img { width: 19px; height: 19px; object-fit: contain; }
+#talk-tab span {
+  writing-mode: vertical-rl; font: 500 9px 'IBM Plex Mono', monospace;
+  letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-faint);
+}
+#talk-tab:hover { width: 40px; background: linear-gradient(180deg, #222836, #171c26); }
+#talk-tab:hover span { color: var(--text-dim); }
