@@ -1,6 +1,7 @@
-/* ============ Chameleon — light workshop theme ============
-   Tokens after IBM Carbon g10; spotlight interactions after
-   Aceternity card-spotlight / hover-border-gradient (mask-composite). */
+/* ============ Chameleon — learning workspace ============
+   Design system carried from the POC (IBM Carbon g10-ish tokens, spotlight
+   tiles). The chat is new: one fused surface (composer + history) that
+   yields to the workspace while the agent acts. */
 
 :root {
   --bg: #0a0c10;
@@ -21,9 +22,17 @@
   --sh-md: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 10px 30px rgba(0, 0, 0, 0.35);
   --sh-lg: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 60px rgba(0, 0, 0, 0.55);
   --ease-spring: cubic-bezier(0.24, 1.04, 0.34, 1);
+  /* Motion vocabulary. Things ENTER with a little overshoot and LEAVE quickly
+     and quietly — arrival deserves attention, departure does not. */
+  --ease-out: cubic-bezier(0.16, 0.9, 0.28, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.85, 0.3);
+  --t-in: 380ms;
+  --t-out: 200ms;
+  --t-move: 300ms;
   --tile-t: 560ms;
-  --chat-w: 400px;
   --r: 14px;
+  --dock-w: min(720px, 92vw);
+  --dock-side-w: 400px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,8 +45,86 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------------- sign-in + baseline ---------------- */
+#gate {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center;
+  background: radial-gradient(900px 600px at 50% 20%, rgba(93, 135, 255, 0.07), transparent 60%), var(--bg);
+  transition: opacity 400ms ease;
+}
+#gate.out { opacity: 0; pointer-events: none; }
+body:not(.gated):not(.booting) #gate { display: none; }
+body.booting #shell { opacity: 0; }
+#shell { transition: opacity 500ms ease; }
+#gate-card {
+  width: min(520px, 92vw); text-align: center;
+  padding: 34px 34px 30px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #181c25, #10141b);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-lg);
+  animation: rise 500ms var(--ease-out);
+}
+.gate-glyph { width: 62px; height: 62px; object-fit: contain; margin-bottom: 12px; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.55)); }
+#gate-card h1 { font-size: 21px; font-weight: 600; letter-spacing: -0.3px; line-height: 1.3; }
+#gate-card p { margin-top: 9px; font-size: 12.5px; line-height: 1.6; color: var(--text-dim); }
+/* the question leads; everything under it is quieter */
+#gate-card h1 { font-size: 21px; font-weight: 600; color: var(--text); line-height: 1.3; letter-spacing: -0.3px; }
+.gate-sub { margin-top: 8px !important; font-size: 12.5px !important; font-weight: 400; color: var(--text-dim) !important; }
+.gate-intro { font-size: 11.5px !important; color: var(--text-faint) !important; margin-top: 8px !important; }
+#gate-form { display: flex; flex-direction: column; gap: 9px; margin-top: 20px; }
+#gate-form input {
+  height: 44px; border-radius: 11px;
+  border: 1px solid var(--line-2); background: rgba(0, 0, 0, 0.3);
+  color: var(--text); font: 400 13.5px 'IBM Plex Sans', sans-serif;
+  padding: 0 14px; outline: none; text-align: center;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+#gate-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.13); }
+#gate-form button {
+  height: 44px; border: 0; border-radius: 11px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 13px 'IBM Plex Sans', sans-serif;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+#gate-form button:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+#gate-form button:disabled { opacity: 0.6; cursor: default; }
+.gate-err { font-size: 12px; color: var(--bad); margin-top: 2px; animation: rise 240ms var(--ease-out); }
+.gate-hint { margin-top: 16px; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); letter-spacing: 0.6px; }
+.gate-progress { display: flex; gap: 6px; justify-content: center; margin-bottom: 16px; }
+.gate-progress i { width: 22px; height: 3px; border-radius: 2px; background: var(--line-2); transition: background 300ms ease, width 300ms var(--ease-out); }
+.gate-progress i.done { background: var(--good); }
+.gate-progress i.on { background: var(--accent); width: 34px; }
+.gate-options { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+.gate-opt {
+  text-align: left; padding: 13px 15px;
+  border: 1px solid var(--line-2); border-radius: 13px;
+  background: var(--fill-1); color: var(--text); cursor: pointer;
+  transition: all 160ms ease;
+  animation: rise 380ms var(--ease-out) backwards;
+}
+.gate-options .gate-opt:nth-child(2) { animation-delay: 50ms; }
+.gate-options .gate-opt:nth-child(3) { animation-delay: 100ms; }
+.gate-options .gate-opt:nth-child(4) { animation-delay: 150ms; }
+.gate-opt b { display: block; font-size: 13.5px; font-weight: 600; }
+.gate-opt span { display: block; font-size: 11.5px; color: var(--text-faint); margin-top: 2px; line-height: 1.45; }
+.gate-opt:hover { border-color: var(--accent); background: rgba(93, 135, 255, 0.06); transform: translateY(-1px); }
+.gate-opt.on { border-color: var(--accent); background: rgba(93, 135, 255, 0.12); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.08); }
+.gate-opt.on b::after { content: ' ✓'; color: var(--accent-2); }
+.gate-actions { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
+.gate-actions button {
+  border: 1px solid var(--line-2); border-radius: 9px; background: transparent;
+  color: var(--text-dim); font: 500 11.5px 'IBM Plex Sans', sans-serif;
+  padding: 8px 16px; cursor: pointer; transition: all 150ms ease;
+}
+.gate-actions button:hover { color: var(--text); border-color: var(--accent); }
+.gate-spin {
+  width: 26px; height: 26px; margin: 22px auto 4px; border-radius: 50%;
+  border: 2px solid var(--line-2); border-top-color: var(--accent);
+  animation: spin 900ms linear infinite;
+}
+
 #aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
-#aurora i { display: none; }
 #aurora::before {
   content: ''; position: absolute; inset: 0;
   background:
@@ -49,94 +136,69 @@ body::after {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 #shell { position: relative; z-index: 2; display: flex; flex-direction: column; height: 100vh; }
-body.snap *, body.snap *::before, body.snap *::after { transition: none !important; animation: none !important; }
 
 /* ---------------- top bar ---------------- */
 #topbar {
   height: 56px; flex: 0 0 56px;
-  display: flex; align-items: center; gap: 18px;
+  display: flex; align-items: center; gap: 14px;
   padding: 0 18px;
   background: rgba(11, 13, 18, 0.72);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
   z-index: 30;
 }
-#brand { display: flex; align-items: center; gap: 11px; flex: 0 0 auto; }
-#brand-mark { width: 34px; height: 34px; flex: 0 0 auto; }
-#brand-mark img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
-#brand b { display: block; font-size: 14px; letter-spacing: -0.1px; }
-#brand span { display: block; font-size: 9.5px; color: var(--text-faint); letter-spacing: 0.6px; text-transform: uppercase; }
-
-/* context switcher */
-#ctxbar { display: flex; gap: 7px; margin-left: 10px; flex: 0 0 auto; }
-.ctxp {
-  position: relative; display: flex; align-items: center; gap: 8px;
-  height: 34px; padding: 0 11px 0 12px;
-  border-radius: 10px; cursor: pointer; user-select: none;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+#brand { display: flex; align-items: center; flex: 0 0 auto; }
+#brand-mark {
+  width: 34px; height: 34px; padding: 0;
+  border: 0; background: transparent; cursor: pointer;
+  border-radius: 9px;
+  transition: transform 200ms var(--ease-spring), filter 200ms ease;
 }
-.ctxp:hover { border-color: var(--line-2); }
-.ctxp > span { font: 600 8px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; color: var(--text-faint); }
-.ctxp > b { font-size: 11.5px; font-weight: 600; color: var(--text-dim); max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ctxp.set > b { color: var(--text); }
-.ctxp.set { border-color: rgba(93, 135, 255, 0.45); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.07); }
-.ctxp > svg { width: 12px; height: 12px; color: var(--text-faint); transition: transform 200ms ease; }
-.ctxp.open > svg { transform: rotate(180deg); }
-.ctxmenu {
+#brand-mark img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
+#brand-mark:hover { transform: rotate(-8deg) scale(1.08); }
+#brand-mark:active { transform: scale(0.94); }
+#topspacer { flex: 1; }
+
+/* session switcher */
+#sessmenu { position: relative; }
+#sess-btn {
+  display: flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 12px;
+  border-radius: 10px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text-dim);
+  font: 600 11.5px 'IBM Plex Sans', sans-serif;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: border-color 160ms ease;
+}
+#sess-btn:hover { border-color: var(--line-2); color: var(--text); }
+#sess-btn b { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sess-btn svg { width: 12px; height: 12px; color: var(--text-faint); transition: transform 200ms ease; }
+#sessmenu.open #sess-btn svg { transform: rotate(180deg); }
+#sess-pop {
   position: absolute; top: calc(100% + 8px); left: 0; z-index: 60;
-  min-width: 250px; max-height: 320px; overflow-y: auto;
+  min-width: 240px; max-height: 320px; overflow-y: auto;
   border-radius: 13px; padding: 5px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  box-shadow: var(--sh-lg);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--sh-lg);
   opacity: 0; transform: translateY(-6px) scale(0.98); pointer-events: none;
   transition: opacity 180ms ease, transform 240ms var(--ease-spring);
   scrollbar-width: none;
 }
-.ctxp.open .ctxmenu { opacity: 1; transform: none; pointer-events: auto; }
-.cm-row {
+#sessmenu.open #sess-pop { opacity: 1; transform: none; pointer-events: auto; }
+.sess-row {
   display: flex; align-items: center; gap: 8px; width: 100%;
   border: 0; background: transparent; cursor: pointer;
   border-radius: 9px; padding: 8px 10px; text-align: left;
   color: var(--text-dim); font: 400 11.5px 'IBM Plex Sans', sans-serif;
   transition: background 130ms ease, color 130ms ease;
 }
-.cm-row:hover { background: rgba(93, 135, 255, 0.07); color: var(--text); }
-.cm-row b { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cm-row span { margin-left: auto; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); white-space: nowrap; }
-.hdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; display: inline-block; }
-.hdot.good { background: var(--good); }
-.hdot.warn { background: #e8a020; }
-.hdot.risk { background: var(--bad); }
-
-/* use-case bar */
-#usecases { display: flex; gap: 7px; margin-left: auto; overflow: hidden; }
-.uc {
-  display: inline-flex; align-items: center; gap: 7px;
-  height: 32px; padding: 0 13px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text-dim);
-  font: 500 11.5px 'IBM Plex Sans', sans-serif;
-  cursor: pointer; white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  transition: all 170ms ease;
-  animation: uc-in 420ms var(--ease-spring) backwards;
-}
-@keyframes uc-in { from { opacity: 0; transform: translateY(-6px); } }
-.uc svg { width: 13px; height: 13px; opacity: 0.75; }
-.uc:hover { color: var(--text); border-color: var(--line-2); transform: translateY(-1px); box-shadow: var(--sh-md); }
-.uc:active { transform: translateY(0) scale(0.98); }
-.uc.gen { color: #c9b8ff; border-color: rgba(167, 139, 250, 0.35); }
-.uc.gen svg { color: #b39dfa; opacity: 1; }
-.uc.gen:hover { border-color: rgba(124, 58, 237, 0.5); background: rgba(124, 58, 237, 0.05); }
+.sess-row:hover { background: rgba(93, 135, 255, 0.07); color: var(--text); }
+.sess-row b { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sess-row span { margin-left: auto; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); }
+.sess-row.on { background: var(--fill-1); }
+.sess-row.new b { color: var(--accent-2); }
 
 /* apps popover */
-#appsmenu { position: relative; flex: 0 0 auto; }
+#appsmenu { position: relative; }
 #apps-btn {
   width: 32px; height: 32px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--panel);
@@ -145,18 +207,126 @@ body.snap *, body.snap *::before, body.snap *::after { transition: none !importa
   transition: all 150ms ease;
 }
 #apps-btn svg { width: 15px; height: 15px; }
-#apps-btn:hover, #appsmenu.open #apps-btn { color: var(--text); border-color: var(--line-2); box-shadow: var(--sh-md); }
+#apps-btn:hover, #appsmenu.open #apps-btn { color: var(--text); border-color: var(--line-2); }
 #apps-pop {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 80;
-  width: 216px; padding: 5px;
+  width: 226px; padding: 5px;
   border-radius: 13px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  box-shadow: var(--sh-lg);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--sh-lg);
   opacity: 0; transform: translateY(-6px); pointer-events: none;
   transition: opacity 180ms ease, transform 220ms var(--ease-spring);
 }
 #appsmenu.open #apps-pop { opacity: 1; transform: none; pointer-events: auto; }
+
+/* how you like to work — the baseline stays changeable, and the system says
+   out loud what it has since concluded from watching */
+#usermenu { position: relative; }
+#user-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: linear-gradient(150deg, var(--accent), #7b5cff);
+  color: #fff; cursor: pointer;
+  font: 600 12px 'IBM Plex Sans', sans-serif;
+  display: grid; place-items: center;
+  transition: all 150ms ease;
+}
+#user-btn:hover, #usermenu.open #user-btn { filter: brightness(1.12); transform: translateY(-1px); }
+/* A settings sheet, not a popover. "Customise everything" only works if there
+   is room for everything — this slides in from the right, is full height, and
+   scrolls with its header and footer pinned. */
+#user-pop {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 90;
+  width: min(360px, 92vw); padding: 18px 18px 14px;
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #161a22, #10141b);
+  border-left: 1px solid var(--line);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.5);
+  border-radius: 0;
+  opacity: 0; transform: translateX(16px); pointer-events: none;
+  transition: opacity 220ms ease, transform 340ms var(--ease-out);
+}
+body.settings-open #user-pop { opacity: 1; transform: none; pointer-events: auto; }
+/* a scrim, so the sheet reads as a layer over the workspace rather than a
+   panel competing with it */
+#user-scrim {
+  position: fixed; inset: 0; z-index: 89;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0; pointer-events: none; transition: opacity 220ms ease;
+}
+body.settings-open #user-scrim { opacity: 1; pointer-events: auto; }
+.up-head {
+  flex: 0 0 auto; display: flex; align-items: baseline; gap: 8px;
+  padding-bottom: 12px; margin-bottom: 2px; border-bottom: 1px solid var(--line);
+}
+.up-head b { font-size: 15px; }
+.up-head span { font: 500 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; color: var(--text-faint); }
+/* the fade says "there is more below" without needing a scrollbar */
+.up-body { position: relative; flex: 1; min-height: 0; display: flex; }
+.up-body::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 24px;
+  background: linear-gradient(to bottom, rgba(16, 20, 27, 0), #10141b);
+  pointer-events: none;
+}
+.up-scroll {
+  flex: 1; min-height: 0; overflow-y: auto;
+  margin: 0 -6px; padding: 0 6px 18px;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+.up-group {
+  font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px;
+  color: var(--accent-2); margin: 16px 0 4px; padding-top: 12px; border-top: 1px solid var(--line);
+}
+.up-scroll > .up-group:first-child { border-top: 0; padding-top: 0; margin-top: 12px; }
+.up-row { padding: 9px 0 6px; }
+.up-row em {
+  display: block; font-style: normal;
+  font: 500 10px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.9px;
+  color: var(--text-faint); margin-bottom: 6px;
+}
+.up-opts { display: flex; gap: 4px; }
+.up-opts button {
+  flex: 1; padding: 7px 4px;
+  border: 1px solid var(--line-2); border-radius: 7px;
+  background: transparent; color: var(--text-dim); cursor: pointer;
+  font: 500 11px 'IBM Plex Sans', sans-serif;
+  transition: all 140ms ease;
+}
+.up-opts button:hover { color: var(--text); border-color: var(--accent); }
+.up-opts button.on { background: rgba(93, 135, 255, 0.16); border-color: var(--accent); color: var(--text); }
+.up-note { display: block; font-size: 10px; color: var(--text-faint); margin-top: 6px; line-height: 1.5; }
+/* which windows the agent may build in at all */
+.up-apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.up-app {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 4px; border-radius: 10px;
+  border: 1px solid var(--line-2); background: transparent;
+  color: var(--text-faint); cursor: pointer;
+  font: 500 10px 'IBM Plex Sans', sans-serif;
+  transition: all 150ms ease;
+}
+.up-app svg { width: 15px; height: 15px; }
+.up-app:hover { color: var(--text); border-color: var(--accent); }
+.up-app.on { color: var(--text); border-color: var(--accent); background: rgba(93, 135, 255, 0.14); }
+.up-app:not(.on) { opacity: 0.4; }
+.up-learned {
+  margin-top: 16px; padding: 10px 11px;
+  border-radius: 9px; background: rgba(46, 204, 139, 0.07); border: 1px solid rgba(46, 204, 139, 0.18);
+}
+.up-learned em {
+  display: block; font-style: normal;
+  font: 500 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--good); margin-bottom: 4px;
+}
+.up-learned span { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+.up-foot { flex: 0 0 auto; display: flex; gap: 7px; padding-top: 12px; border-top: 1px solid var(--line); }
+.up-foot button {
+  flex: 1; padding: 9px; border-radius: 8px;
+  border: 1px solid var(--line); background: transparent; color: var(--text-faint);
+  font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: all 140ms ease;
+}
+.up-retake:hover { color: var(--accent-2); border-color: var(--accent); background: rgba(93, 135, 255, 0.06); }
+.up-out:hover { color: var(--bad); border-color: var(--bad); background: rgba(220, 47, 106, 0.07); }
 .ap-row {
   display: flex; align-items: center; gap: 9px; width: 100%;
   border: 0; background: transparent; cursor: pointer;
@@ -173,13 +343,15 @@ body.snap *, body.snap *::before, body.snap *::after { transition: none !importa
 /* ---------------- stage / canvas ---------------- */
 #stage { flex: 1; position: relative; min-height: 0; }
 #workspace {
-  position: absolute; left: 14px; top: 14px; bottom: 14px;
-  right: calc(var(--chat-w) + 26px);
-  transition: right 560ms var(--ease-spring);
+  position: absolute; left: 14px; right: 14px; top: 14px;
+  bottom: 100px;
+  transition: bottom 460ms var(--ease-spring), left 460ms var(--ease-spring), right 460ms var(--ease-spring);
 }
-body.chat-center #workspace, body.chat-mini #workspace, body.chat-float #workspace { right: 14px; }
-body.dock-left #workspace { left: calc(var(--chat-w) + 26px); right: 14px; }
-body.dock-bottom #workspace { left: 14px; right: 14px; bottom: 134px; }
+body.chat-center #workspace { opacity: 0; pointer-events: none; }
+/* a side dock takes its own column; minimised gives the canvas nearly everything */
+body.place-left  #workspace { left: calc(var(--dock-side-w) + 26px); right: 14px; bottom: 14px; }
+body.place-right #workspace { right: calc(var(--dock-side-w) + 26px); left: 14px; bottom: 14px; }
+body.place-mini  #workspace { bottom: 110px; }  /* clears the real pill, which wraps to two lines */
 #canvas {
   position: relative; width: 100%; height: 100%;
   background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.3px);
@@ -189,15 +361,13 @@ body.dock-bottom #workspace { left: 14px; right: 14px; bottom: 134px; }
 #canvas::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
   background-image: radial-gradient(rgba(150, 180, 255, 0.6) 1.2px, transparent 1.7px);
-  background-size: 26px 26px;
-  background-position: 3px 3px;
+  background-size: 26px 26px; background-position: 3px 3px;
   -webkit-mask-image: radial-gradient(150px 150px at var(--mx, -300px) var(--my, -300px), #000 0%, rgba(0, 0, 0, 0.3) 45%, transparent 72%);
   mask-image: radial-gradient(150px 150px at var(--mx, -300px) var(--my, -300px), #000 0%, rgba(0, 0, 0, 0.3) 45%, transparent 72%);
   opacity: var(--mo, 0);
   transition: opacity 400ms ease;
 }
 
-/* drop ghost + tile dragging */
 #drop-ghost {
   position: absolute; z-index: 1;
   border: 1.5px dashed rgba(93, 135, 255, 0.5);
@@ -206,41 +376,8 @@ body.dock-bottom #workspace { left: 14px; right: 14px; bottom: 134px; }
   opacity: 0; pointer-events: none;
   transition: left var(--tile-t) var(--ease-spring), top var(--tile-t) var(--ease-spring), width var(--tile-t) var(--ease-spring), height var(--tile-t) var(--ease-spring), opacity 200ms ease;
 }
-.tile-head { cursor: grab; }
-.tile.rz, #chatpane.rz { cursor: nwse-resize; }
-.tile.rz .tile-head { cursor: nwse-resize; }
-body.tiledrag { cursor: grabbing; user-select: none; }
-body.tiledrag .tile-head { cursor: grabbing; }
-.tile.drag {
-  transition: width var(--tile-t) var(--ease-spring), height var(--tile-t) var(--ease-spring), box-shadow 200ms ease;
-  z-index: 40;
-  box-shadow: var(--sh-lg);
-  opacity: 0.98;
-}
-body.tiledrag .tile:not(.drag) { pointer-events: none; }
 
-/* chat drag dock-zones */
-.zone {
-  position: absolute; z-index: 15;
-  border: 1.5px dashed rgba(93, 135, 255, 0.45);
-  border-radius: var(--r);
-  background: rgba(93, 135, 255, 0.045);
-  opacity: 0; pointer-events: none; transform: scale(0.985);
-  display: grid; place-items: center;
-  font: 600 11px 'IBM Plex Sans', sans-serif; color: #a8bcff; letter-spacing: 0.2px;
-  transition: opacity 180ms ease, transform 260ms var(--ease-spring), background 140ms ease, border-color 140ms ease;
-}
-#zone-right, #zone-left { top: 14px; bottom: 14px; width: 128px; writing-mode: vertical-rl; letter-spacing: 1.8px; font-size: 10.5px; text-transform: uppercase; }
-#zone-right { right: 14px; }
-#zone-left { left: 14px; transform: scale(0.985) rotate(180deg); }
-body.chatzones #zone-left { transform: rotate(180deg); }
-#zone-bottom { left: 50%; bottom: 14px; width: min(560px, 48%); height: 150px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; transform: translateX(-50%) scale(0.985); }
-body.chatzones #zone-bottom { transform: translateX(-50%); }
-#zone-mini { right: 158px; bottom: 14px; width: 230px; height: 52px; border-radius: 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; }
-body.chatzones .zone { opacity: 1; transform: none; }
-.zone.arm { background: rgba(93, 135, 255, 0.12); border-style: solid; }
-
-/* ---------------- tiles (spotlight cards) ---------------- */
+/* ---------------- tiles ---------------- */
 .tile {
   position: absolute; z-index: 2;
   display: flex; flex-direction: column;
@@ -260,41 +397,43 @@ body.chatzones .zone { opacity: 1; transform: none; }
     box-shadow 240ms ease;
   will-change: left, top, width, height;
 }
-/* cursor-tracked border glint (Aceternity hover-border-gradient) */
 .tile::before {
   content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px;
-  background: radial-gradient(240px circle at var(--px, -300px) var(--py, -300px),
-    hsl(var(--h) 85% 68% / 0.8), transparent 65%);
+  background: radial-gradient(240px circle at var(--px, -300px) var(--py, -300px), hsl(var(--h) 85% 68% / 0.8), transparent 65%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   opacity: 0; transition: opacity 300ms ease;
   pointer-events: none;
 }
-/* interior spotlight sheen */
 .tile::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: radial-gradient(340px circle at var(--px, -300px) var(--py, -300px),
-    hsl(var(--h) 85% 65% / 0.08), transparent 70%);
+  background: radial-gradient(340px circle at var(--px, -300px) var(--py, -300px), hsl(var(--h) 85% 65% / 0.08), transparent 70%);
   opacity: 0; transition: opacity 300ms ease;
   pointer-events: none;
 }
 .tile:hover::before, .tile:hover::after { opacity: 1; }
 .tile.focus { border-color: hsl(var(--h) 70% 62% / 0.55); box-shadow: var(--sh-md), 0 0 0 3px hsl(var(--h) 80% 60% / 0.1), 0 0 30px hsl(var(--h) 80% 60% / 0.08); }
-.tile.enter { transform: translateY(10px) scale(0.985); opacity: 0; }
+.tile.enter { transform: translateY(14px) scale(0.97); opacity: 0; }
 .tile.suppressed { opacity: 0.12; filter: saturate(0.3); pointer-events: none; }
-.tile.exit { transform: scale(0.97); opacity: 0; }
-
-.tile-head {
-  flex: 0 0 36px;
-  display: flex; align-items: center; gap: 8px;
-  padding: 0 8px 0 13px;
-  user-select: none;
+.tile.exit {
+  transform: scale(0.94) translateY(-4px); opacity: 0; pointer-events: none;
+  transition: transform var(--t-out) var(--ease-in), opacity var(--t-out) var(--ease-in);
 }
-.tile-ico { width: 14px; height: 14px; flex: 0 0 auto; color: hsl(var(--h) 75% 68%); }
+/* a tile the agent just touched gets a brief edge-light, so your eye follows */
+.tile.pulse::after { animation: tilepulse 900ms var(--ease-out); }
+@keyframes tilepulse {
+  0% { opacity: 0; }
+  35% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.tile-head { flex: 0 0 36px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 13px; user-select: none; cursor: grab; }
+.tile-ico { width: 14px; height: 14px; color: hsl(var(--h) 75% 68%); }
 .tile-ico svg { width: 14px; height: 14px; display: block; }
 .tile-name { font: 500 11.5px 'IBM Plex Sans', sans-serif; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-size { font: 500 8.5px 'IBM Plex Mono', monospace; color: var(--text-faint); border: 1px solid var(--line); border-radius: 5px; padding: 1.5px 5px; text-transform: uppercase; }
+.tile-size { display: none; }
+.tile-size--unused { font: 500 8.5px 'IBM Plex Mono', monospace; color: var(--text-faint); border: 1px solid var(--line); border-radius: 5px; padding: 1.5px 5px; text-transform: uppercase; }
 .tile-actions { margin-left: auto; display: flex; gap: 2px; opacity: 0; transform: translateX(4px); transition: all 200ms ease; }
 .tile:hover .tile-actions { opacity: 1; transform: none; }
 .tbtn {
@@ -306,172 +445,442 @@ body.chatzones .zone { opacity: 1; transform: none; }
 }
 .tbtn:hover { background: var(--fill-2); color: var(--text); }
 .tbtn.close:hover { background: rgba(220, 47, 106, 0.1); color: var(--bad); }
-.tile-body { flex: 1; min-height: 0; overflow: hidden; position: relative; container-type: size; }
+.tile-body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+/* Content used to stop dead at the tile edge, mid-word, with nothing to say
+   there was more below. A fade reads as "keep scrolling" instead of "broken". */
+.tile-body::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 26px;
+  background: linear-gradient(to bottom, rgba(16, 20, 27, 0), #10141b);
+  opacity: 0.9; pointer-events: none; z-index: 1;
+}
+.tile-body:has(.app-empty)::after { content: none; }
 
-/* ---------------- chat pane ---------------- */
-#chatpane {
-  position: absolute;
-  top: 14px; bottom: 14px; right: 14px;
-  width: var(--chat-w);
-  display: flex; flex-direction: column;
-  border-radius: var(--r);
-  background: linear-gradient(180deg, #181c25, #10141b);
-  border: 1px solid var(--line);
-  box-shadow: var(--sh-md);
-  transition:
-    width 560ms var(--ease-spring),
-    right 560ms var(--ease-spring),
-    left 560ms var(--ease-spring),
-    top 560ms var(--ease-spring),
-    bottom 560ms var(--ease-spring),
-    height 480ms var(--ease-spring),
-    border-radius 560ms var(--ease-spring),
-    box-shadow 300ms ease;
-  z-index: 20;
-  overflow: hidden;
+.tile.rz { cursor: nwse-resize; }
+.tile.rz .tile-head { cursor: nwse-resize; }
+.tile.rz-x { cursor: ew-resize; }
+.tile.rz-y { cursor: ns-resize; }
+body.tiledrag { cursor: grabbing; user-select: none; }
+body.tiledrag .tile:not(.drag) { pointer-events: none; }
+.tile.drag {
+  transition: width var(--tile-t) var(--ease-spring), height var(--tile-t) var(--ease-spring), box-shadow 200ms ease;
+  z-index: 40; box-shadow: var(--sh-lg); opacity: 0.98;
 }
-#chatpane::before {
-  content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px;
-  background: radial-gradient(260px circle at var(--px, -300px) var(--py, -300px), rgba(140, 170, 255, 0.6), transparent 65%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0; transition: opacity 300ms ease; pointer-events: none;
-}
-#chatpane:hover::before { opacity: 1; }
 
-/* dock sides */
-body.dock-left #chatpane { left: 14px; right: auto; top: 14px; bottom: 14px; width: var(--chat-w); }
-body.dock-left #chat-drag { left: auto; right: 0; }
-/* bottom = a clean, wide composer (Claude/ChatGPT style); the transcript
-   lives on the canvas as its own tile while this mode is active */
-body.dock-bottom #chatpane {
-  top: auto; bottom: 16px;
-  left: calc(50% - min(380px, 32vw)); right: auto;
-  width: min(760px, 64vw);
-  height: auto;
-  border-radius: 16px;
-  box-shadow: var(--sh-lg);
+/* ephemeral in-tile status: what's being made, right now (commandment 7) */
+.tile-status {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 10px 6px; padding: 5px 9px;
+  border-radius: 8px;
+  background: hsl(var(--h) 70% 60% / 0.09);
+  border: 1px solid hsl(var(--h) 60% 60% / 0.28);
+  font: 500 10.5px 'IBM Plex Sans', sans-serif;
+  color: hsl(var(--h) 85% 80%);
+  animation: msg-in 260ms var(--ease-spring);
 }
-body.dock-bottom #chatpane #chat-log, body.dock-bottom #suggestions, body.dock-bottom #chat-hero,
-body.dock-bottom #chat-drag { display: none; }
-body.dock-bottom #chat-head { flex-basis: 38px; border-bottom: 0; }
-body.dock-bottom #chat-form { padding: 0 14px 14px; }
-body.dock-bottom #chat-input { height: 48px; font-size: 14px; border-radius: 12px; }
-body.dock-bottom #chat-send { width: 48px; height: 48px; border-radius: 12px; }
-.tile-body > #chat-log { height: 100%; padding: 12px 14px; }
+.ts-dot {
+  width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto;
+  background: hsl(var(--h) 85% 70%);
+  animation: pulse 1.2s ease-in-out infinite;
+}
 
-/* float: movable card hugging content */
-body.chat-float #chatpane {
-  top: auto; bottom: 14px; right: 14px; left: auto;
-  width: var(--chat-fw, 380px);
-  height: var(--chat-h, 320px);
-  box-shadow: var(--sh-lg);
-}
-body.chat-float.chat-placed #chatpane { left: var(--fx); top: var(--fy); right: auto; bottom: auto; }
-body.chat-float #chat-log { flex: 0 1 auto; }
-body.chat-float #chat-head { cursor: grab; }
-body.chat-float.dragging #chat-head { cursor: grabbing; }
-body.chat-float #chat-drag, body.chat-float #chat-width { display: none; }
-#chat-float svg { transition: transform 250ms var(--ease-spring); }
-body:not(.chat-float) #chat-float svg { transform: rotate(180deg); }
+/* ============ shared motion ============
+   One vocabulary for everything that appears or disappears, so the workspace
+   feels like a single object rather than a collection of widgets. */
+@keyframes rise { from { opacity: 0; transform: translateY(9px) scale(0.985); } }
+@keyframes fall { to { opacity: 0; transform: translateY(-6px) scale(0.985); } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } }
+@keyframes slideOut { to { opacity: 0; transform: translateX(14px); } }
+@keyframes popIn { from { opacity: 0; transform: scale(0.9); } }
+@keyframes sheen { to { background-position: 200% 0; } }
 
-/* mini: a true sliver along the bottom — click to reopen, drag to pull it back out */
-body.chat-mini #chatpane {
-  width: 320px; height: 30px;
-  top: auto; right: auto;
-  left: calc(50% - 160px); bottom: 6px;
-  border-radius: 999px;
-  box-shadow: var(--sh-lg);
-}
-body.chat-mini #chat-head { flex-basis: 30px; border-bottom: 0; cursor: pointer; padding: 0 12px; font-size: 11px; gap: 7px; }
-body.chat-mini .ch-dot { width: 6px; height: 6px; }
-body.chat-mini #chat-grip svg { width: 10px; height: 10px; }
-body.chat-mini #chat-log, body.chat-mini #chat-form, body.chat-mini #suggestions,
-body.chat-mini #chat-hero, body.chat-mini #chat-drag { display: none; }
-body.chat-mini #chatpane:hover { border-color: rgba(93, 135, 255, 0.45); transform: translateY(-1px); }
+.enter-rise { animation: rise var(--t-in) var(--ease-out) backwards; }
+.leave-fall { animation: fall var(--t-out) var(--ease-in) forwards; pointer-events: none; }
+.leave-slide { animation: slideOut var(--t-out) var(--ease-in) forwards; pointer-events: none; }
 
-/* centered launch always wins */
-body.chat-center #chatpane {
-  height: auto; left: auto;
-  width: min(660px, 86vw);
-  right: calc(50% - min(330px, 43vw));
-  top: 17%; bottom: 16%;
-  border-radius: 18px;
-  box-shadow: var(--sh-lg);
+/* rows that arrive in a list stagger just enough to read as a sequence */
+.stagger > * { animation: rise var(--t-in) var(--ease-out) backwards; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(n+6) { animation-delay: 200ms; }
+
+/* content arriving live: each item lands as it is written */
+.born { animation: rise var(--t-in) var(--ease-out) backwards; }
+@keyframes born { from { opacity: 0; transform: translateY(7px); } }
+
+/* Anyone who asks for less motion gets the state changes without the travel. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }
-body.dragging #chatpane, body.dragging #workspace { transition: none; }
-body.dragging { user-select: none; cursor: grabbing; }
+.draft-root { height: 100%; overflow-y: auto; padding: 12px 14px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.draft-items { display: flex; flex-direction: column; gap: 4px; }
+.draft-head { margin-bottom: 8px; }
+/* the caret on the text being typed right now */
+.caret {
+  display: inline-block; width: 2px; height: 0.95em;
+  vertical-align: text-bottom; margin-left: 2px;
+  background: var(--accent-2); border-radius: 1px;
+  animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+.writing {
+  display: flex; align-items: center; gap: 5px;
+  padding: 9px 4px 4px;
+  font: 500 10.5px 'IBM Plex Sans', sans-serif; color: var(--text-faint);
+}
+.writing i {
+  width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+  animation: orb 1.1s ease-in-out infinite;
+}
+.writing i:nth-child(2) { animation-delay: 0.15s; }
+.writing i:nth-child(3) { animation-delay: 0.3s; }
+.writing span { margin-left: 4px; }
+@keyframes orb { 40% { transform: translateY(-4px); opacity: 0.45; } }
+.drafting { height: 100%; overflow-y: auto; padding: 12px 14px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.drafting .qq-freebox {
+  font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint);
+  border: 1px dashed var(--line-2); border-radius: 8px; padding: 8px 10px;
+}
+.fc-draftlist { display: flex; flex-direction: column; gap: 6px; }
+.fc-draft { border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; }
+.fc-draft b { display: block; font-size: 11.5px; font-weight: 500; }
+.fc-draft span { display: block; font-size: 10.5px; color: var(--text-faint); margin-top: 2px; }
+
+/* narration overlay — the agent talking inside the app window */
+/* The agent speaking inside the app it is working in. This is the primary
+   voice — it stays put until superseded or dismissed, so the window teaches
+   and the transcript stays out of the way. */
+.tile-narr {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6;
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 10px 12px 10px 11px; border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 26, 36, 0.97), rgba(14, 17, 24, 0.97));
+  backdrop-filter: blur(10px);
+  border: 1px solid hsl(var(--h) 60% 60% / 0.4);
+  border-left: 2.5px solid hsl(var(--h) 75% 62% / 0.85);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 22px hsl(var(--h) 80% 60% / 0.12);
+  font-size: 12.5px; line-height: 1.55; color: var(--text);
+  animation: narr-in 340ms var(--ease-spring);
+}
+.tile-narr img { width: 20px; height: 20px; flex: 0 0 auto; margin-top: 1px; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5)); }
+.tile-narr span { flex: 1; min-width: 0; }
+.tile-narr {
+  cursor: pointer;
+  transition: left var(--t-move) var(--ease-out), top var(--t-move) var(--ease-out),
+    bottom var(--t-move) var(--ease-out), padding var(--t-move) var(--ease-out),
+    border-radius var(--t-move) var(--ease-out), background var(--t-move) ease;
+}
+
+/* Tucked: a small avatar holding the line until you want it. It parks at the
+   TOP right — the bottom of a tile is where controls live (deck bar, flip,
+   submit) and an avatar there sits on them. */
+.tile-narr.tucked {
+  left: auto; right: 10px; bottom: auto; top: 42px;
+  padding: 7px; border-radius: 999px;
+  border-left-width: 1px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+.tile-narr.tucked span, .tile-narr.tucked .narr-x { display: none; }
+.tile-narr.tucked img { width: 18px; height: 18px; margin: 0; }
+.tile-narr.tucked::after {
+  content: ''; position: absolute; inset: -3px; border-radius: inherit;
+  border: 1px solid hsl(var(--h) 75% 62% / 0.35);
+  animation: tuckedping 2.6s var(--ease-out) infinite;
+  pointer-events: none;
+}
+@keyframes tuckedping { 0% { opacity: 0.9; transform: scale(1); } 60%, 100% { opacity: 0; transform: scale(1.35); } }
+.tile-narr.tucked:hover { background: hsl(var(--h) 60% 55% / 0.22); }
+.tile-narr.instant { animation: none; }
+.narr-x {
+  flex: 0 0 auto; width: 18px; height: 18px; margin: -1px -3px 0 0;
+  border: 0; background: transparent; color: var(--text-faint);
+  border-radius: 5px; cursor: pointer; font-size: 13px; line-height: 1;
+  display: grid; place-items: center; opacity: 0;
+  transition: opacity 150ms ease, background 140ms ease, color 140ms ease;
+}
+.tile-narr:hover .narr-x { opacity: 1; }
+.narr-x:hover { background: var(--fill-2); color: var(--text); }
+.tile-narr.out { opacity: 0; transform: translateY(6px); transition: all 300ms ease; }
+@keyframes narr-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+
+/* resize guides + waves + shake */
+.rz-guide {
+  position: absolute; z-index: 1; pointer-events: none; opacity: 0;
+  border: 1.5px dashed rgba(255, 255, 255, 0.22); border-radius: 12px;
+  transition: opacity 200ms ease;
+}
+.rz-guide span { position: absolute; top: 5px; left: 8px; font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; color: var(--text-faint); }
+#rz-dims {
+  position: absolute; z-index: 45; pointer-events: none; opacity: 0;
+  font: 600 11px 'IBM Plex Mono', monospace; color: var(--accent-2);
+  background: rgba(10, 13, 20, 0.9); border: 1px solid rgba(93, 135, 255, 0.4);
+  padding: 3px 8px; border-radius: 7px;
+  transition: opacity 150ms ease;
+}
+.wave {
+  position: absolute; z-index: 1; pointer-events: none;
+  border-radius: 50%; transform: translate(-50%, -50%) scale(0.4);
+  border: 1.5px solid var(--wc, rgba(140, 170, 255, 0.5));
+  animation: wave-out var(--wd, 560ms) ease-out forwards;
+}
+@keyframes wave-out { to { transform: translate(-50%, -50%) scale(1); opacity: 0; } }
 @keyframes shakeX { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
 .shake { animation: shakeX 320ms ease !important; }
-body.dragging #chatpane.rz, body.dragging #chatpane.rz #chat-head { cursor: nwse-resize; }
 
-#chat-drag { position: absolute; left: 0; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 5; }
-#chat-drag::after { content: ''; position: absolute; left: 2px; top: 50%; height: 44px; width: 3px; border-radius: 3px; background: var(--line-2); transform: translateY(-50%); opacity: 0; transition: opacity 200ms ease; }
-#chat-drag:hover::after, body.dragging #chat-drag::after { opacity: 1; }
-body.chat-center #chat-drag { display: none; }
-
-#chat-head {
-  flex: 0 0 46px;
-  display: flex; align-items: center; gap: 9px;
-  padding: 0 10px 0 16px;
-  border-bottom: 1px solid var(--line);
-  font-size: 12.5px; font-weight: 600;
+/* ---------------- the fused chat surface ---------------- */
+#chatdock {
+  position: absolute; z-index: 20;
+  left: calc(50% - var(--dock-w) / 2);
+  width: var(--dock-w);
+  bottom: 16px;
+  display: flex; flex-direction: column;
+  transition: bottom 500ms var(--ease-spring), top 500ms var(--ease-spring),
+    left 500ms var(--ease-spring), right 500ms var(--ease-spring), width 500ms var(--ease-spring);
 }
-.ch-dot { display: none; }
-@keyframes pulse { 50% { opacity: 0.35; } }
-#chat-grip { margin-left: auto; width: 22px; height: 22px; display: grid; place-items: center; color: var(--text-faint); border-radius: 6px; }
+/* The empty state belongs to the whole screen, not to a docked column. There
+   is no workspace to sit beside yet, so the invitation is centred whatever
+   placement they normally use; it takes its dock as soon as there is something
+   to sit beside. */
+body.chat-center #chatdock {
+  top: 14% !important; bottom: auto !important;
+  left: calc(50% - var(--dock-w) / 2) !important;
+  right: auto !important;
+  width: var(--dock-w) !important;
+  justify-content: flex-start !important;
+}
+
+/* lifted: the panel tracks the cursor, so a drag feels like carrying it */
+body.chat-lifted #chatdock {
+  transform: translate(var(--drag-x, 0), var(--drag-y, 0)) scale(0.97);
+  transition: none;
+  z-index: 40;
+  opacity: 0.96;
+  pointer-events: none;
+  filter: drop-shadow(0 22px 46px rgba(0, 0, 0, 0.6));
+}
+body.chat-lifted #chat-bar { background: var(--fill-2); }
+
+/* ---- placements ---- */
+body.place-left #chatdock,
+body.place-right #chatdock {
+  top: 14px; bottom: 14px; width: var(--dock-side-w);
+  justify-content: flex-end;
+}
+body.place-left #chatdock { left: 14px; right: auto; }
+body.place-right #chatdock { right: 14px; left: auto; }
+body.place-left #chat-log-wrap,
+body.place-right #chat-log-wrap { flex: 1 1 auto; }
+
+/* minimised: a sliver you can still type into */
+/* Minimised sits below the canvas rather than over it, so it can't cover a
+   tile's narration. */
+body.place-mini #chatdock {
+  left: auto; right: 16px; bottom: 8px;
+  width: 300px;
+  cursor: pointer;
+}
+body.place-mini #chat-log-wrap, body.place-mini #hero { display: none; }
+body.place-mini #chat-input { height: 38px; font-size: 12.5px; }
+body.place-mini #chat-send { width: 38px; height: 38px; }
+body.place-mini #chat-where::after { content: ' — click to expand'; }
+
+/* the drag bar — the whole strip is the handle */
+#chat-bar {
+  display: none; align-items: center; gap: 7px;
+  padding: 4px 8px 7px;
+  color: var(--text-faint);
+  user-select: none;
+  cursor: grab;
+  border-radius: 12px 12px 0 0;
+  transition: background 160ms ease, color 160ms ease;
+}
+#chatdock.fused #chat-bar { display: flex; }
+body.chat-center #chat-bar { display: none !important; }
+#chat-bar:hover { background: var(--fill-1); color: var(--text-dim); }
+body.dragging #chat-bar { cursor: grabbing; background: var(--fill-2); }
+#chat-grip { display: grid; place-items: center; width: 16px; height: 16px; }
 #chat-grip svg { width: 13px; height: 13px; }
-#chatpane:hover #chat-grip { color: var(--text-dim); }
-body:not(.chat-center) #chat-head { cursor: grab; }
-body.dragging #chat-head { cursor: grabbing; }
-body.chat-center #chat-grip { display: none; }
-#chat-tools { margin-left: auto; display: flex; gap: 3px; }
-.cbtn {
-  position: relative;
-  width: 27px; height: 27px; border: 0; border-radius: 8px;
-  background: transparent; color: var(--text-faint); cursor: pointer;
-  display: grid; place-items: center;
-  transition: all 150ms ease;
+#chat-where { font: 500 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; }
+#chat-bar::after {
+  content: 'drag to move';
+  margin-left: 8px; font: 500 9px 'IBM Plex Mono', monospace; letter-spacing: 0.6px;
+  opacity: 0; transition: opacity 160ms ease;
 }
-.cbtn svg { width: 14px; height: 14px; }
-.cbtn:hover { background: var(--fill-2); color: var(--text); }
-.cbtn[data-tip]:hover::after {
-  content: attr(data-tip);
-  position: absolute; top: calc(100% + 7px); right: 0;
-  background: #16181d; color: #fff;
-  font: 500 10px 'IBM Plex Sans', sans-serif;
-  padding: 4px 8px; border-radius: 6px; white-space: nowrap;
-  box-shadow: var(--sh-md); z-index: 90;
-  animation: uc-in 150ms ease;
+#chat-bar:hover::after { opacity: 0.55; }
+#chat-collapse {
+  margin-left: auto; width: 24px; height: 22px;
+  border: 0; background: transparent; color: var(--text-faint);
+  border-radius: 6px; cursor: pointer; display: grid; place-items: center;
+  transition: opacity 200ms ease, background 140ms ease, color 140ms ease;
 }
-body.chat-center #chat-tools { display: none; }
+#chat-collapse svg { width: 13px; height: 13px; transition: transform 300ms var(--ease-spring); }
+#chat-collapse:hover { background: var(--fill-2); color: var(--text); }
+body.chat-collapsed #chat-collapse svg { transform: rotate(180deg); }
+/* while the agent works the history is hidden for us — no toggle to offer, and
+   a chevron flipping mid-generation was pure noise */
+body.acting #chat-collapse, body.place-mini #chat-collapse { opacity: 0; pointer-events: none; }
+body.acting #chat-bar::after { content: none; }
+body.acting #chat-bar { cursor: default; background: transparent; }
 
-/* hero (centered, pre-conversation) */
-#chat-hero { display: none; padding: 40px 44px 6px; text-align: center; }
-body.chat-center #chat-hero { display: block; animation: hero-in 700ms var(--ease-spring); }
-body.has-msgs #chat-hero { display: none; }
-body.chat-center:not(.has-msgs) #chat-hero { margin-top: auto; }
-body.chat-center:not(.has-msgs) #chat-form { margin-bottom: auto; }
+/* drop zones while dragging the chat */
+.zone {
+  position: absolute; z-index: 15;
+  border: 1.5px dashed rgba(93, 135, 255, 0.45);
+  border-radius: var(--r);
+  background: rgba(93, 135, 255, 0.045);
+  opacity: 0; pointer-events: none; transform: scale(0.985);
+  display: grid; place-items: center;
+  font: 600 10.5px 'IBM Plex Sans', sans-serif; color: #a8bcff; letter-spacing: 1.4px; text-transform: uppercase;
+  transition: opacity 180ms ease, transform 260ms var(--ease-spring), background 140ms ease;
+}
+#zone-left, #zone-right { top: 14px; bottom: 14px; width: 150px; writing-mode: vertical-rl; }
+#zone-left { left: 14px; }
+#zone-right { right: 14px; }
+#zone-center { left: 50%; bottom: 14px; width: min(560px, 46%); height: 140px; transform: translateX(-50%) scale(0.985); }
+body.chatzones #zone-center { transform: translateX(-50%); }
+#zone-mini { right: 14px; bottom: 14px; width: 290px; height: 56px; border-radius: 12px; }
+body.chatzones .zone { opacity: 1; transform: none; }
+body.chatzones #zone-center { transform: translateX(-50%); }
+.zone.arm { background: rgba(93, 135, 255, 0.13); border-style: solid; }
+body.dragging { user-select: none; }
+
+/* ---- ephemeral status strip (commandment 7) ---- */
+/* A self-contained pill: the composer is not always sitting on a card (it
+   isn't when minimised, or before the first message), and bare text floating
+   over the tiles was unreadable and looked like a glitch. */
+#chat-status {
+  display: none; align-items: center; gap: 8px;
+  align-self: flex-start; max-width: 100%;
+  margin: 0 0 8px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  background: rgba(13, 16, 22, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font: 500 11px 'IBM Plex Sans', sans-serif; color: var(--accent-2);
+}
+body.has-status #chat-status { display: flex; animation: rise var(--t-in) var(--ease-out); }
+/* It is a strip of the chat surface, so it must not stray outside the width
+   the canvas has already reserved for that surface. */
+#chat-status { position: relative; z-index: 2; }
+body.chat-center #chat-status { align-self: center; }
+/* inside the fused card it needs no shell of its own */
+#chatdock.fused #chat-status { background: var(--fill-1); border-color: var(--line); box-shadow: none; backdrop-filter: none; margin-left: 2px; }
+#chat-status i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: 0 0 auto;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+#chat-status span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* reasoning reads as an aside, not as a statement of fact */
+#chat-status.thinking { color: var(--text-faint); font-style: italic; }
+#chat-status.thinking i { background: var(--text-faint); }
+
+#hero { display: none; text-align: center; padding: 0 20px 26px; }
+body.chat-center #hero { display: block; animation: hero-in 700ms var(--ease-spring); }
 @keyframes hero-in { from { opacity: 0; transform: translateY(12px); } }
-.hero-glyph { width: 92px; height: 92px; object-fit: contain; margin: 0 auto 8px; display: block; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 26px rgba(76, 224, 176, 0.16)); }
-#chat-hero h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.4px; color: var(--text); }
-#chat-hero p { margin-top: 9px; font-size: 13px; line-height: 1.6; color: var(--text-dim); max-width: 430px; margin-inline: auto; }
+.hero-glyph { width: 92px; height: 92px; object-fit: contain; margin: 0 auto 10px; display: block; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 26px rgba(76, 224, 176, 0.16)); }
+#hero h1 { font-size: 27px; font-weight: 600; letter-spacing: -0.4px; }
+#hero p { margin: 10px auto 0; font-size: 13px; line-height: 1.6; color: var(--text-dim); max-width: 460px; }
+#suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+.sug {
+  display: flex; align-items: center; gap: 9px; text-align: left;
+  border: 1px solid var(--line); border-radius: 13px;
+  background: var(--panel); color: var(--text);
+  font: 400 12.5px 'IBM Plex Sans', sans-serif;
+  padding: 12px 14px; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: all 180ms ease;
+  animation: msg-in 500ms var(--ease-spring) backwards;
+}
+.sug:nth-child(2) { animation-delay: 60ms; }
+.sug:nth-child(3) { animation-delay: 120ms; }
+.sug:nth-child(4) { animation-delay: 180ms; }
+.sug svg { width: 15px; height: 15px; flex: 0 0 auto; color: hsl(var(--h, 220) 80% 72%); }
+.sug:hover { border-color: rgba(93, 135, 255, 0.4); background: rgba(93, 135, 255, 0.04); transform: translateY(-2px); box-shadow: var(--sh-md); }
+
+/* The fused card: history + composer are ONE surface (commandment 5).
+   It reads as a single panel so it never looks like loose text over tiles. */
+#chatdock.fused {
+  background: rgba(13, 16, 22, 0.93);
+  backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--sh-lg);
+  padding: 6px;
+  transition: bottom 500ms var(--ease-spring), background 400ms ease, border-color 400ms ease, box-shadow 400ms ease, padding 400ms ease;
+}
+/* Docked to a side the agent is a LAYER, not a panel: no card, no border, no
+   shadow — the conversation simply occupies its column and only the composer
+   is drawn. Apps are the things in boxes; the agent is not an app. */
+body.place-left #chatdock.fused,
+body.place-right #chatdock.fused {
+  background: transparent; backdrop-filter: none; border-color: transparent;
+  box-shadow: none; border-radius: 0; padding: 0;
+}
+body.place-left #chat-bar, body.place-right #chat-bar { opacity: 0.4; transition: opacity 180ms ease; }
+body.place-left #chatdock:hover #chat-bar, body.place-right #chatdock:hover #chat-bar { opacity: 1; }
+
+/* while the agent acts, the card collapses back to a bare composer */
+body.acting #chatdock.fused {
+  background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0;
+}
+
+/* History collapse uses a 1fr → 0fr grid row: it animates smoothly whether the
+   log is height-capped (centre) or flex-filling (side docks), where animating
+   max-height would snap. */
+#chat-log-wrap {
+  display: grid; grid-template-rows: 1fr; min-height: 0;
+  transition: grid-template-rows 380ms var(--ease-spring), opacity 240ms ease;
+}
+body.acting #chat-log-wrap,
+body.chat-collapsed #chat-log-wrap { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+/* the row collapses to 0fr but the log's own padding survives it, leaving the
+   card ~26px taller than "closed" */
+body.acting #chat-log,
+body.chat-collapsed #chat-log { padding-top: 0; padding-bottom: 0; }
+body.chat-center #chat-log-wrap,
+body:not(.has-msgs) #chat-log-wrap { display: none; }
 
 #chat-log {
-  flex: 1; overflow-y: auto; min-height: 0;
-  padding: 16px 16px 8px;
+  min-height: 0;
+  max-height: 42vh;
+  overflow-y: auto;
   display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 12px 14px;
   scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
 }
-body.chat-center:not(.has-msgs) #chat-log { flex: 0 1 auto; }
-.msg { max-width: 94%; display: flex; flex-direction: column; gap: 6px; align-self: flex-start; align-items: flex-start; animation: msg-in 380ms var(--ease-spring); }
-@keyframes msg-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
-.bubble { padding: 9px 13px; border-radius: 14px; font-size: 13px; line-height: 1.55; word-wrap: break-word; }
-.msg.user .bubble { background: var(--accent); color: #fff; border-bottom-left-radius: 5px; }
-.msg.agent .bubble { background: rgba(255, 255, 255, 0.06); color: var(--text); border-bottom-left-radius: 5px; }
-.msg.error .bubble { background: rgba(220, 47, 106, 0.07); color: var(--bad); border: 1px solid rgba(220, 47, 106, 0.3); }
-/* markdown inside agent bubbles */
+body.place-left #chat-log, body.place-right #chat-log { max-height: none; }
+
+.msg { max-width: 92%; display: flex; flex-direction: column; align-self: flex-start; align-items: flex-start; animation: msg-in var(--t-in) var(--ease-out); }
+.msg.agent { max-width: 100%; }
+.msg.user { align-self: flex-end; align-items: flex-end; animation-name: msgInUser; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+@keyframes msgInUser { from { opacity: 0; transform: translateY(10px) translateX(8px) scale(0.97); } }
+/* The agent is not an app. Its words are text on the surface, not a bubble in
+   a box — a bubble reads as another thing on the page, competing with the
+   things on the page. What the LEARNER says keeps a bubble: their turn is an
+   event, the agent's is running commentary. */
+.bubble { padding: 0; border-radius: 0; font-size: 13.5px; line-height: 1.62; word-wrap: break-word; background: none; border: 0; }
+.msg.user .bubble {
+  padding: 8px 13px; border-radius: 14px; border-bottom-right-radius: 5px;
+  background: rgba(93, 135, 255, 0.16); border: 1px solid rgba(93, 135, 255, 0.3);
+  color: var(--text); font-size: 13px;
+}
+.msg.agent .bubble { color: var(--text-dim); }
+.msg.agent .bubble strong { color: var(--text); }
+.msg.error .bubble { padding: 8px 12px; border-radius: 10px; background: rgba(220, 47, 106, 0.07); color: var(--bad); border: 1px solid rgba(220, 47, 106, 0.3); }
+.msg.chipline .bubble { display: none; }
+.msg.chipline { flex-direction: row; }
+
 .msg.agent .bubble p { margin: 0; }
 .msg.agent .bubble p + p, .msg.agent .bubble p + ul, .msg.agent .bubble p + ol,
 .msg.agent .bubble ul + p, .msg.agent .bubble ol + p, .msg.agent .bubble h4 + p { margin-top: 7px; }
@@ -483,623 +892,1298 @@ body.chat-center:not(.has-msgs) #chat-log { flex: 0 1 auto; }
 .msg.agent .bubble h4:first-child { margin-top: 0; }
 .msg.agent .bubble code { font: 500 11px 'IBM Plex Mono', monospace; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
 
-.action-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .achip {
   display: inline-flex; align-items: center; gap: 5px;
   font: 500 10px 'IBM Plex Mono', monospace;
   color: hsl(var(--h, 220) 85% 78%);
-  background: hsl(var(--h, 220) 75% 62% / 0.1);
+  background: hsl(var(--h, 220) 75% 62% / 0.12);
   border: 1px solid hsl(var(--h, 220) 65% 60% / 0.32);
   border-radius: 7px; padding: 3.5px 8px;
+  max-width: 100%;
   animation: msg-in 320ms var(--ease-spring) backwards;
 }
-.achip svg { width: 11px; height: 11px; }
-.achip.neg { color: var(--text-dim); background: var(--fill-1); border-color: var(--line); }
-.achip.evt { color: #a8bcff; background: rgba(93, 135, 255, 0.07); border-color: rgba(93, 135, 255, 0.3); }
+.achip svg { width: 11px; height: 11px; flex: 0 0 auto; }
+.achip i { font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.achip.evt { color: #a8bcff; background: rgba(93, 135, 255, 0.1); border-color: rgba(93, 135, 255, 0.3); }
 
-.thinking { display: flex; align-items: center; gap: 10px; color: var(--text-dim); font-size: 12px; padding: 4px 2px; }
-.thinking .orbs { display: flex; gap: 4px; }
-.thinking .orbs i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: orb 1.1s ease-in-out infinite; }
-.thinking .orbs i:nth-child(2) { animation-delay: 0.15s; }
-.thinking .orbs i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes orb { 40% { transform: translateY(-5px); opacity: 0.45; } }
-.thinking span { background: linear-gradient(90deg, var(--text-dim), #e2e8f2, var(--text-dim)); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 1.7s linear infinite; }
-@keyframes shimmer { to { background-position: -200% 0; } }
-
-#suggestions { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 16px 10px; }
-.sug {
-  display: flex; align-items: center; gap: 8px; text-align: left;
-  border: 1px solid var(--line); border-radius: 999px;
-  background: var(--panel); color: var(--text-dim);
-  font: 400 11.5px 'IBM Plex Sans', sans-serif;
-  padding: 7px 12px; cursor: pointer;
-  transition: all 180ms ease;
-}
-.sug svg { width: 13px; height: 13px; flex: 0 0 auto; color: hsl(var(--h, 220) 80% 72%); }
-.sug:hover { color: var(--text); border-color: rgba(93, 135, 255, 0.4); background: rgba(93, 135, 255, 0.04); transform: translateY(-1px); }
-body.chat-center #suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px 34px 22px; }
-body.chat-center .sug {
-  border-radius: 13px; padding: 12px 14px; font-size: 12.5px; color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  animation: msg-in 500ms var(--ease-spring) backwards;
-}
-body.chat-center .sug:nth-child(2) { animation-delay: 60ms; }
-body.chat-center .sug:nth-child(3) { animation-delay: 120ms; }
-body.chat-center .sug:nth-child(4) { animation-delay: 180ms; }
-body.chat-center .sug svg { width: 15px; height: 15px; }
-body.chat-center .sug:hover { box-shadow: var(--sh-md); transform: translateY(-2px); }
-
-#chat-form { flex: 0 0 auto; display: flex; gap: 8px; padding: 12px 14px 14px; }
-body.chat-center #chat-form { padding: 6px 34px 28px; }
+/* composer */
+#chat-form { display: flex; gap: 8px; }
 #chat-input {
-  flex: 1; height: 42px;
-  border-radius: 11px;
+  flex: 1; height: 48px;
+  border-radius: 13px;
   border: 1px solid var(--line-2);
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(8, 10, 15, 0.9);
+  backdrop-filter: blur(10px);
   color: var(--text);
-  font: 400 13px 'IBM Plex Sans', sans-serif;
-  padding: 0 14px; outline: none;
+  font: 400 13.5px 'IBM Plex Sans', sans-serif;
+  padding: 0 16px; outline: none;
+  box-shadow: var(--sh-md);
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 #chat-input::placeholder { color: var(--text-faint); }
-#chat-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.13); }
+#chat-input:focus { border-color: var(--accent); box-shadow: var(--sh-md), 0 0 0 3px rgba(93, 135, 255, 0.13); }
 #chat-send {
-  width: 42px; height: 42px; flex: 0 0 auto;
-  border: 0; border-radius: 11px;
+  position: relative;
+  width: 48px; height: 48px; flex: 0 0 auto;
+  border: 0; border-radius: 13px;
   background: var(--accent); color: #fff; cursor: pointer;
   display: grid; place-items: center;
-  transition: transform 150ms ease, filter 150ms ease;
+  box-shadow: var(--sh-md);
+  transition: transform 150ms ease, filter 150ms ease, background 250ms ease;
 }
-#chat-send svg { width: 16px; height: 16px; }
+#chat-send svg { width: 17px; height: 17px; grid-area: 1 / 1; transition: opacity 200ms ease, transform 200ms ease; }
+#chat-send .spin { grid-area: 1 / 1; width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); border-top-color: #fff; opacity: 0; transition: opacity 200ms ease; }
 #chat-send:hover { transform: translateY(-1px); filter: brightness(1.1); }
 #chat-send:active { transform: scale(0.96); }
-#chat-send:disabled { opacity: 0.45; cursor: default; transform: none; }
+#chat-send .ic-stop { opacity: 0; transform: scale(0.6); }
+/* the working indicator IS the stop button (commandment 4) */
+body.busy #chat-send { background: #232936; }
+body.busy #chat-send .ic-send { opacity: 0; transform: scale(0.6); }
+body.busy #chat-send .ic-stop { opacity: 1; transform: none; }
+body.busy #chat-send .spin { opacity: 1; animation: spin 900ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------------- pickers ---------------- */
-.pick { height: 100%; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; scrollbar-width: none; }
-.pick-cap { font: 600 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.3px; color: var(--text-faint); padding: 2px 2px 6px; }
-.pick-row {
-  display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--line); border-radius: 11px; cursor: pointer; text-align: left;
-  background: var(--panel);
-  color: var(--text); padding: 10px 13px;
-  font: 400 12px 'IBM Plex Sans', sans-serif;
-  transition: all 160ms ease;
-  animation: msg-in 400ms var(--ease-spring) backwards;
+/* ---------------- shared app bits ---------------- */
+.app-empty {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  color: var(--text-faint); font-size: 12px; text-align: center; padding: 16px;
 }
-.pick-row:nth-child(2) { animation-delay: 40ms; } .pick-row:nth-child(3) { animation-delay: 80ms; }
-.pick-row:nth-child(4) { animation-delay: 120ms; } .pick-row:nth-child(5) { animation-delay: 160ms; }
-.pick-row:nth-child(6) { animation-delay: 200ms; } .pick-row:nth-child(7) { animation-delay: 240ms; }
-.pick-row:hover { border-color: rgba(93, 135, 255, 0.45); background: rgba(93, 135, 255, 0.035); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
-.pick-row b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pick-row span { margin-left: auto; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); white-space: nowrap; }
-.pick-row em { font-style: normal; color: var(--text-faint); }
+.app-empty svg { width: 26px; height: 26px; opacity: 0.5; }
 
-/* universal clickable affordance */
-.zap { cursor: pointer; border-radius: 7px; transition: background 140ms ease, box-shadow 140ms ease, color 140ms ease; }
-.zap:hover { background: rgba(93, 135, 255, 0.07); box-shadow: 0 0 0 4px rgba(93, 135, 255, 0.07); color: var(--text); }
-.kpi { cursor: pointer; }
-.cat { cursor: pointer; }
-.acct { cursor: pointer; }
-.deal { cursor: pointer; }
+.chipbtn {
+  border: 1px solid var(--line-2); border-radius: 999px;
+  background: var(--fill-1); color: var(--text-dim);
+  font: 500 11px 'IBM Plex Sans', sans-serif;
+  padding: 6px 13px; cursor: pointer;
+  transition: all 150ms ease;
+}
+.chipbtn:hover { color: var(--text); border-color: var(--accent); background: rgba(93, 135, 255, 0.08); }
+.chipbtn:disabled { opacity: 0.5; cursor: default; }
+.chipbtn.dim { opacity: 0.7; }
+.chipbtn.ok { border-color: rgba(60, 226, 165, 0.4); color: var(--good); }
+.chipbtn.ok:hover { background: rgba(60, 226, 165, 0.08); }
+.chipbtn.no { border-color: rgba(255, 95, 143, 0.35); color: var(--bad); }
+.chipbtn.no:hover { background: rgba(255, 95, 143, 0.07); }
+.chipbtn.deep { color: #c9b8ff; border-color: rgba(167, 139, 250, 0.4); }
+.chipbtn.deep:hover { background: rgba(124, 58, 237, 0.08); }
 
-/* ================= app renderers ================= */
+/* ---------------- plan ---------------- */
+.plan { height: 100%; display: flex; flex-direction: column; padding: 10px 12px 12px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+/* In a short tile the step card is the thing that must survive: the trail
+   below it can scroll away, but "I'm ready" can never end up under the edge
+   with no way to reach it. */
+.plan-now { flex: 0 0 auto; }
+.plan-head { flex: 0 0 auto; }
+.plan-head { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.plan-ring { width: 40px; height: 40px; flex: 0 0 auto; }
+.plan-ring text { fill: var(--text); font: 600 9px 'IBM Plex Mono', monospace; text-anchor: middle; }
+.plan-title b { display: block; font-size: 12.5px; }
+.plan-title span { font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); }
+/* the live goal leads — this is shared progress, not a to-do list */
+.plan-live {
+  margin: 9px 0 4px; padding: 10px 12px;
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(93, 135, 255, 0.13), rgba(93, 135, 255, 0.05));
+  border: 1px solid rgba(93, 135, 255, 0.42);
+  box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.06);
+  animation: msg-in 340ms var(--ease-spring);
+}
+.plan-live em {
+  display: flex; align-items: center; gap: 6px;
+  font: 600 8.5px 'IBM Plex Mono', monospace; font-style: normal;
+  text-transform: uppercase; letter-spacing: 1.3px; color: var(--accent-2);
+  margin-bottom: 4px;
+}
+.plan-live em::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-2); animation: pulse 1.6s ease-in-out infinite;
+}
+.plan-live b { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+.plan-live span { display: block; font-size: 10.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
 
-/* ---- Presentation (dark stage on light app) ---- */
-.pres { display: flex; height: 100%; }
-.pres-rail { flex: 0 0 150px; border-right: 1px solid var(--line); overflow-y: auto; padding: 10px 9px; display: flex; flex-direction: column; gap: 6px; scrollbar-width: none; }
-.thumb { font-size: 10.5px; color: var(--text-dim); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; cursor: pointer; line-height: 1.35; transition: all 160ms ease; background: var(--panel); }
-.thumb span { display: block; font: 500 8.5px 'IBM Plex Mono', monospace; color: var(--text-faint); margin-bottom: 3px; }
-.thumb:hover { border-color: var(--line-2); color: var(--text); transform: translateX(2px); }
-.thumb.on { border-color: rgba(93, 135, 255, 0.5); background: rgba(93, 135, 255, 0.05); color: var(--text); }
-.pres-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0 12px 10px; gap: 10px; }
-.slide {
-  flex: 1; min-height: 0; position: relative;
-  border-radius: 13px;
-  background:
-    radial-gradient(560px 300px at 88% -12%, rgba(80, 140, 255, 0.25), transparent 62%),
-    linear-gradient(160deg, #1a2740, #0e1526 70%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 12px 34px rgba(0, 0, 0, 0.5);
-  padding: clamp(14px, 6%, 40px);
-  display: flex; flex-direction: column; justify-content: center; gap: 12px;
+/* ---- the current step ----
+   The one thing the learner is doing, what finished looks like, and the button
+   that moves them on. Everything else in this window is context for it. */
+.plan-now {
+  margin: 10px 0 4px; padding: 11px 12px 10px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(93, 135, 255, 0.14), rgba(93, 135, 255, 0.04));
+  border: 1px solid rgba(93, 135, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.05), 0 6px 18px rgba(0, 0, 0, 0.3);
+  animation: msg-in 380ms var(--ease-spring);
+}
+.plan-now.idle {
+  background: var(--fill-1); border-color: var(--line-2); box-shadow: none;
+}
+.plan-now.advancing { animation: stepDone 460ms var(--ease-out) forwards; }
+@keyframes stepDone {
+  40% { transform: scale(1.015); border-color: var(--good); box-shadow: 0 0 0 4px rgba(46, 204, 139, 0.16); }
+  100% { transform: translateY(-6px) scale(0.99); opacity: 0.35; }
+}
+.pn-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.pn-top em {
+  display: flex; align-items: center; gap: 6px;
+  font: 600 8.5px 'IBM Plex Mono', monospace; font-style: normal;
+  text-transform: uppercase; letter-spacing: 1.3px; color: var(--accent-2);
+}
+.pn-top em::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-2); animation: pulse 1.6s ease-in-out infinite;
+}
+.pn-apps { display: flex; gap: 5px; opacity: 0.75; }
+.pn-apps i { display: block; width: 12px; height: 12px; color: var(--text-dim); }
+.pn-apps svg { width: 100%; height: 100%; }
+.plan-now > b { display: block; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.pn-do { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
+/* what "finished" means — the thing that stops the plan being guesswork */
+.pn-done {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin-top: 8px; padding: 6px 8px;
+  border-radius: 8px; background: rgba(46, 204, 139, 0.08);
+  border: 1px solid rgba(46, 204, 139, 0.2);
+}
+.pn-done i { flex: 0 0 auto; width: 11px; height: 11px; margin-top: 2px; color: var(--good); }
+.pn-done svg { width: 100%; height: 100%; stroke-width: 2; }
+.pn-done span { font-size: 10.5px; color: var(--text-dim); line-height: 1.45; }
+.pn-actions { display: flex; gap: 6px; margin-top: 10px; }
+.pn-go {
+  flex: 1; height: 30px; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 11px 'IBM Plex Sans', sans-serif;
+  transition: filter 150ms ease, transform 150ms ease, opacity 150ms ease;
+}
+.pn-go:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+.pn-go:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+.pn-stuck {
+  height: 30px; padding: 0 11px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text-dim);
+  font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: all 150ms ease;
+}
+.pn-stuck:hover:not(:disabled) { color: var(--warn); border-color: var(--warn); background: rgba(232, 165, 71, 0.08); }
+.pn-go:disabled, .pn-stuck:disabled { opacity: 0.45; cursor: default; }
+.pt-start {
+  flex: 0 0 auto; width: 19px; height: 19px; margin-top: 1px;
+  border: 0; background: transparent; color: var(--text-faint);
+  border-radius: 5px; cursor: pointer; opacity: 0;
+  display: grid; place-items: center;
+  transition: opacity 150ms ease, background 140ms ease, color 140ms ease;
+}
+.pt-start svg { width: 11px; height: 11px; fill: currentColor; stroke: none; }
+.plan-task:hover .pt-start { opacity: 1; }
+.pt-start:hover { background: rgba(93, 135, 255, 0.14); color: var(--accent-2); }
+.plan-task.done .pt-start { display: none; }
+
+.plan-body { flex: 1; overflow-y: auto; padding-top: 8px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.plan-stage { font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-faint); margin: 7px 0 3px; }
+.plan-task {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 6px 8px; border-radius: 9px;
+  transition: background 140ms ease, opacity 220ms ease, transform 220ms ease;
+}
+.plan-task:hover { background: var(--fill-1); }
+.plan-task.removing { animation: slideOut var(--t-out) var(--ease-in) forwards; pointer-events: none; }
+.plan-body .plan-task { animation: rise var(--t-in) var(--ease-out) backwards; }
+.plan-live { animation: rise var(--t-in) var(--ease-out); }
+.pt-tick { cursor: pointer; display: block; }
+/* the checkbox is an override, not the mechanism: hidden until you reach for it */
+.plan-task input { position: absolute; opacity: 0; width: 16px; height: 16px; left: 7px; top: 7px; margin: 0; cursor: pointer; }
+.pt-text { flex: 1; min-width: 0; }
+.pt-text b { cursor: text; border-radius: 4px; padding: 0 2px; margin: 0 -2px; outline: none; transition: background 140ms ease, box-shadow 140ms ease; }
+.pt-text b:hover { background: rgba(255, 255, 255, 0.05); }
+.pt-text b:focus { background: rgba(0, 0, 0, 0.35); box-shadow: 0 0 0 1px var(--accent); }
+.pt-del {
+  flex: 0 0 auto; width: 19px; height: 19px; margin-top: 1px;
+  border: 0; background: transparent; color: var(--text-faint);
+  border-radius: 5px; cursor: pointer; font-size: 14px; line-height: 1;
+  display: grid; place-items: center; opacity: 0;
+  transition: opacity 150ms ease, background 140ms ease, color 140ms ease;
+}
+.plan-task:hover .pt-del { opacity: 1; }
+.pt-del:hover { background: rgba(220, 47, 106, 0.12); color: var(--bad); }
+.plan-add {
+  margin-top: 6px; align-self: flex-start;
+  border: 1px dashed var(--line-2); border-radius: 8px;
+  background: transparent; color: var(--text-faint);
+  font: 500 10.5px 'IBM Plex Sans', sans-serif;
+  padding: 5px 10px; cursor: pointer;
+  transition: all 150ms ease;
+}
+.plan-add:hover { color: var(--accent-2); border-color: var(--accent); background: rgba(93, 135, 255, 0.06); }
+.pt-mark {
+  flex: 0 0 auto; width: 13px; height: 13px; margin-top: 2px;
+  border-radius: 50%; border: 1.5px solid var(--line-2);
+  display: grid; place-items: center;
+  transition: all 180ms ease;
+}
+.plan-task:hover .pt-mark { border-color: var(--accent); }
+.plan-task.doing .pt-mark { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.12); }
+.plan-task.doing .pt-mark::after {
+  content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--accent-2);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.plan-task.done .pt-mark { border-color: var(--good); background: var(--good); }
+.plan-task.done .pt-mark::after {
+  content: '✓'; font-size: 9px; font-weight: 700; color: #0a0c10; line-height: 1;
+}
+.plan-task b { display: block; font-size: 12px; font-weight: 500; line-height: 1.4; }
+.plan-task span { display: block; font-size: 10.5px; color: var(--text-faint); margin-top: 1px; }
+.plan-task.done b { color: var(--text-faint); }
+.plan-task.doing b { color: var(--text); font-weight: 600; }
+@keyframes pulse { 50% { opacity: 0.4; } }
+
+/* ---------------- sources (notebook) ---------------- */
+.srcs { height: 100%; display: flex; flex-direction: column; padding: 10px 12px 12px; gap: 8px; }
+.srcs-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.srcs-none { color: var(--text-faint); font-size: 11.5px; line-height: 1.55; padding: 8px 4px; }
+.src {
+  display: flex; align-items: center; gap: 9px;
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+  transition: border-color 150ms ease, background 150ms ease;
+  animation: rise var(--t-in) var(--ease-out) backwards;
+}
+.src:hover { border-color: var(--line-2); background: var(--fill-1); }
+.src.removing { animation: slideOut var(--t-out) var(--ease-in) forwards; pointer-events: none; }
+.src > i { font-style: normal; font-size: 12px; opacity: 0.7; }
+.src-main { flex: 1; min-width: 0; cursor: pointer; }
+.src-main b { display: block; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-main span { display: block; font-size: 10px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-del { border: 0; background: transparent; color: var(--text-faint); cursor: pointer; font-size: 13px; border-radius: 6px; width: 22px; height: 22px; }
+.src-del:hover { color: var(--bad); background: rgba(220, 47, 106, 0.1); }
+.src-add { display: flex; flex-direction: column; gap: 6px; }
+.src-add input, .src-add textarea {
+  border: 1px solid var(--line-2); border-radius: 9px;
+  background: rgba(0, 0, 0, 0.28); color: var(--text);
+  font: 400 11.5px 'IBM Plex Sans', sans-serif;
+  padding: 7px 10px; outline: none; resize: none;
+}
+.src-add textarea { min-height: 74px; }
+.src-add input:focus, .src-add textarea:focus { border-color: var(--accent); }
+.sa-row { display: flex; gap: 6px; }
+.srcs-actions { flex: 0 0 auto; }
+
+/* ---------------- lesson ---------------- */
+.lesson { height: 100%; overflow-y: auto; padding: 14px 18px 18px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.lesson-title { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.lesson-sec { margin-bottom: 16px; }
+.lesson-sec h3 {
+  font-size: 13px; font-weight: 600; color: var(--accent-2);
+  display: flex; align-items: center; gap: 7px;
+  cursor: pointer; border-radius: 7px; padding: 3px 6px; margin: 0 -6px 6px;
+  transition: background 140ms ease;
+}
+.lesson-sec h3:hover { background: rgba(93, 135, 255, 0.07); }
+.lesson-sec h3 i { font-style: normal; font-size: 11px; opacity: 0; color: #c9b8ff; transition: opacity 150ms ease; }
+.lesson-sec h3:hover i { opacity: 1; }
+.lesson-body { font-size: 12.5px; line-height: 1.65; color: var(--text-dim); }
+.lesson-body p + p { margin-top: 7px; }
+.lesson-body strong { color: var(--text); }
+.lesson-body code { font: 500 11px 'IBM Plex Mono', monospace; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+.lesson-body ul, .lesson-body ol { margin: 7px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.lesson-body > *:first-child { margin-top: 0; }
+.lesson-body a { color: var(--accent-2); text-decoration: underline; text-underline-offset: 2px; }
+.lesson-body a:hover { color: #fff; }
+.lesson-body del { opacity: 0.55; }
+.lesson-body mark { background: rgba(240, 168, 60, 0.22); color: #ffd79a; border-radius: 3px; padding: 0 3px; }
+.lesson-body img { max-width: 100%; border-radius: 10px; margin: 8px 0; }
+.lesson-body hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.lesson-body .md-h { font: 600 12px 'IBM Plex Sans', sans-serif; color: var(--text); margin: 14px 0 6px; letter-spacing: -0.1px; }
+
+/* generated illustration */
+.genimg { margin: 12px 0; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); }
+.genimg img { display: block; width: 100%; height: auto; animation: imgIn 620ms var(--ease-out); }
+/* the image is in the DOM from the moment it starts loading, so it must stay
+   invisible until it actually has pixels — otherwise the placeholder jumps */
+.genimg img.genimg-in { display: none; }
+.genimg.ready img.genimg-in { display: block; }
+@keyframes imgIn { from { opacity: 0; transform: scale(1.03); filter: blur(6px); } }
+.genimg figcaption { padding: 7px 11px; font-size: 10.5px; color: var(--text-faint); border-top: 1px solid var(--line); }
+.genimg-wait {
+  aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; gap: 9px;
+  font: 500 11px 'IBM Plex Sans', sans-serif; color: var(--text-faint);
+  background: repeating-linear-gradient(115deg, rgba(255,255,255,0.028) 0 12px, transparent 12px 24px);
+}
+.genimg-wait i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+.genimg-failed .genimg-wait { aspect-ratio: 6 / 1; color: var(--warn); }
+.genimg-failed .genimg-wait i { background: var(--warn); animation: none; }
+
+/* diagrams, charts and maths */
+.viz {
+  margin: 12px 0; padding: 10px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  overflow-x: auto; text-align: center;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+/* A diagram illustrates the prose — it must not swallow the tile. Capped by
+   default, click to open it out. */
+.viz svg { max-width: 100%; width: auto; height: auto; max-height: 420px; transition: max-height 320ms var(--ease-spring); }
+.viz-diagram { cursor: zoom-in; position: relative; }
+.viz-diagram.zoom { cursor: zoom-out; }
+.viz-diagram.zoom svg { max-height: none; width: 100%; }
+.viz-diagram::after {
+  content: '⤢'; position: absolute; top: 6px; right: 8px;
+  font-size: 11px; color: var(--text-faint); opacity: 0;
+  transition: opacity 160ms ease;
+}
+.viz-diagram:hover::after { opacity: 0.8; }
+.viz .viz-fallback {
+  display: none;
+  font: 400 10.5px/1.55 'IBM Plex Mono', monospace;
+  color: var(--text-faint); text-align: left; white-space: pre-wrap;
+}
+/* not yet mounted, or the CDN never answered: show the source, it still reads */
+.viz:not([data-done]) .viz-fallback,
+.viz[data-done="offline"] .viz-fallback,
+.viz.viz-error .viz-fallback { display: block; }
+.viz.viz-error { border-color: rgba(240, 168, 60, 0.35); }
+.viz.viz-error::before {
+  content: 'source'; display: block; text-align: left;
+  font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--warn); margin-bottom: 5px;
+}
+.viz.mermaid-src.viz-error::before { content: 'diagram source'; }
+.viz.chart-src.viz-error::before { content: 'chart source'; }
+.katex { font-size: 1.02em; }
+.katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+pre.code.streaming { opacity: 0.75; }
+
+/* tables */
+.tablewrap { margin: 10px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.tablewrap table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.tablewrap th, .tablewrap td { padding: 7px 11px; text-align: left; border-bottom: 1px solid var(--line); }
+.tablewrap th {
+  font: 600 9.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.9px;
+  color: var(--text-faint); background: rgba(255, 255, 255, 0.035);
+  position: sticky; top: 0;
+}
+.tablewrap tbody tr:last-child td { border-bottom: 0; }
+.tablewrap tbody tr:hover td { background: rgba(255, 255, 255, 0.022); }
+.tablewrap td strong { color: #fff; }
+
+/* callouts */
+.callout {
+  margin: 11px 0; border-radius: 11px; overflow: hidden;
+  border: 1px solid var(--cl-line, var(--line-2));
+  background: var(--cl-bg, var(--fill-1));
+  border-left-width: 3px;
+}
+.callout-head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 12px 5px;
+  font: 600 10px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.1px;
+  color: var(--cl-fg, var(--text-dim));
+}
+.callout-head i { font-style: normal; font-size: 11px; }
+.callout-body { padding: 0 12px 9px; font-size: 12px; line-height: 1.6; color: var(--text-dim); }
+.callout-body > p:first-child { margin-top: 0; }
+.callout-body strong { color: var(--text); }
+.callout.key   { --cl-bg: rgba(93, 135, 255, 0.09); --cl-line: rgba(93, 135, 255, 0.45); --cl-fg: var(--accent-2); }
+.callout.tip   { --cl-bg: rgba(60, 226, 165, 0.08); --cl-line: rgba(60, 226, 165, 0.4);  --cl-fg: var(--good); }
+.callout.note  { --cl-bg: rgba(255, 255, 255, 0.04); --cl-line: var(--line-2);            --cl-fg: var(--text-dim); }
+.callout.warn  { --cl-bg: rgba(240, 168, 60, 0.09);  --cl-line: rgba(240, 168, 60, 0.45); --cl-fg: var(--warn); }
+.callout.example { --cl-bg: rgba(167, 139, 250, 0.08); --cl-line: rgba(167, 139, 250, 0.42); --cl-fg: #c9b8ff; }
+.callout.question { --cl-bg: rgba(255, 95, 143, 0.07); --cl-line: rgba(255, 95, 143, 0.38); --cl-fg: #ffa8c4; }
+
+blockquote {
+  margin: 10px 0; padding: 2px 0 2px 13px;
+  border-left: 2px solid var(--line-2);
+  color: var(--text-dim); font-style: italic;
+}
+
+/* task lists */
+li.task { list-style: none; display: flex; align-items: flex-start; gap: 8px; margin-left: -18px; }
+li.task i {
+  flex: 0 0 auto; width: 12px; height: 12px; margin-top: 3px;
+  border: 1.5px solid var(--line-2); border-radius: 3px;
+  display: grid; place-items: center;
+}
+li.task.done i { background: var(--good); border-color: var(--good); }
+li.task.done i::after { content: '✓'; font-size: 9px; font-weight: 700; color: #0a0c10; line-height: 1; }
+li.task.done { color: var(--text-faint); }
+pre.code {
+  position: relative;
+  margin: 9px 0; padding: 11px 13px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(0, 0, 0, 0.34);
+  overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+pre.code code {
+  display: block; background: none; border: 0; padding: 0;
+  font: 400 11.5px/1.6 'IBM Plex Mono', monospace;
+  color: #cfe0ff; white-space: pre; tab-size: 2;
+}
+pre.code[data-lang]::after {
+  content: attr(data-lang);
+  position: absolute; top: 6px; right: 9px;
+  font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-faint);
+}
+.bubble pre.code { margin: 7px 0; }
+.lesson-body li::marker { color: var(--accent); }
+.lesson-body h4 { font: 600 10px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-faint); margin: 10px 0 4px; }
+
+/* ---------------- quiz ---------------- */
+.quiz { height: 100%; overflow-y: auto; padding: 12px 14px 14px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.quiz-title { font-size: 13.5px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+.quiz-score { font: 600 10px 'IBM Plex Mono', monospace; font-style: normal; color: var(--good); border: 1px solid rgba(60, 226, 165, 0.35); border-radius: 999px; padding: 2px 8px; }
+.qq { margin-bottom: 14px; }
+.qq-p { font-size: 12.5px; font-weight: 500; margin-bottom: 7px; line-height: 1.5; }
+.qq-free { font: 500 9px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.8px; margin-left: 6px; }
+.qq-choices { display: flex; flex-direction: column; gap: 5px; }
+.qq-c {
+  text-align: left; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--fill-1); color: var(--text-dim);
+  font: 400 12px 'IBM Plex Sans', sans-serif;
+  padding: 8px 11px; cursor: pointer;
+  transition: all 140ms ease;
+}
+.qq-c:hover:not(:disabled) { color: var(--text); border-color: var(--line-2); }
+.qq-c.sel { border-color: var(--accent); color: var(--text); background: rgba(93, 135, 255, 0.09); }
+.qq-c.right { border-color: rgba(60, 226, 165, 0.6); color: var(--good); background: rgba(60, 226, 165, 0.07); }
+.qq-c.wrong { border-color: rgba(255, 95, 143, 0.55); color: var(--bad); background: rgba(255, 95, 143, 0.06); }
+.qq-c:disabled { cursor: default; }
+.qq-t {
+  width: 100%; min-height: 60px; resize: vertical;
+  border: 1px solid var(--line-2); border-radius: 9px;
+  background: rgba(0, 0, 0, 0.28); color: var(--text);
+  font: 400 12px 'IBM Plex Sans', sans-serif;
+  padding: 8px 10px; outline: none;
+}
+.qq-t:focus { border-color: var(--accent); }
+.qq-ex { margin-top: 6px; font-size: 11px; line-height: 1.5; padding: 6px 9px; border-radius: 8px; animation: rise var(--t-in) var(--ease-out) backwards; }
+.qq-c { animation: none; }
+/* the graded state lands one question at a time */
+.quiz .qq:nth-child(2) .qq-ex { animation-delay: 60ms; }
+.quiz .qq:nth-child(3) .qq-ex { animation-delay: 120ms; }
+.quiz .qq:nth-child(4) .qq-ex { animation-delay: 180ms; }
+.quiz-score { animation: popIn var(--t-in) var(--ease-out) 140ms backwards; }
+.qq-ex.ok { color: var(--good); background: rgba(60, 226, 165, 0.06); }
+.qq-ex.no { color: #ffb4c9; background: rgba(255, 95, 143, 0.06); }
+.quiz-go { margin-top: 4px; }
+.quiz-after { font-size: 11px; color: var(--text-faint); padding: 6px 0; }
+
+/* ---------------- flashcards ---------------- */
+.fc { height: 100%; display: flex; flex-direction: column; padding: 10px 14px 12px; }
+.fc-topic { font: 600 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-faint); }
+.fc-stage { flex: 1; min-height: 0; perspective: 900px; padding: 8px 0; }
+.fc-card { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 480ms var(--ease-spring); cursor: pointer; }
+.fc-card.flip { transform: rotateY(180deg); }
+.fc-face {
+  position: absolute; inset: 0; backface-visibility: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid var(--line-2); border-radius: 13px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.012));
+  font-size: 13px; line-height: 1.5; text-align: center; padding: 14px 18px;
   overflow: hidden;
 }
-.slide-wm { position: absolute; right: 18px; bottom: -14px; font: 700 clamp(48px, 16cqw, 110px)/1 'IBM Plex Sans', sans-serif; color: rgba(180, 205, 255, 0.06); letter-spacing: -4px; pointer-events: none; }
-.slide-kicker { display: flex; align-items: center; gap: 8px; font: 600 9.5px 'IBM Plex Mono', monospace; letter-spacing: 1.6px; text-transform: uppercase; color: #8fb3ff; }
-.slide-kicker::before { content: ''; width: 18px; height: 2px; border-radius: 2px; background: #8fb3ff; }
-.slide-title { font-size: clamp(16px, 4.6cqw, 34px); font-weight: 700; letter-spacing: -0.5px; line-height: 1.12; color: #fff; }
-.slide ul { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-.slide li { font-size: clamp(11px, 2.2cqw, 15px); color: #c8d4ea; position: relative; }
-.slide li.zap { margin-left: -6px; padding: 2px 8px 2px 23px; }
-.slide li.zap::before { content: ''; position: absolute; left: 6px; top: 0.68em; width: 8px; height: 2px; border-radius: 2px; background: #6fa0ff; }
-.slide li.zap:hover { color: #fff; background: rgba(120, 160, 255, 0.12); box-shadow: none; }
-.slide-num { position: absolute; top: 14px; right: 16px; font: 500 9.5px 'IBM Plex Mono', monospace; color: rgba(200, 215, 240, 0.5); }
-.pres-notes { flex: 0 0 auto; max-height: 86px; overflow-y: auto; font-size: 11.5px; line-height: 1.55; color: var(--text-dim); border: 1px dashed var(--line-2); border-radius: 10px; padding: 9px 13px; scrollbar-width: none; }
-.pres-notes b { display: block; font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.4px; color: var(--accent); margin-bottom: 3px; }
-.pres-ctl { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 14px; }
-.pbtn { width: 27px; height: 27px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel); color: var(--text-dim); font-size: 15px; cursor: pointer; transition: all 160ms ease; }
-.pbtn:hover { color: var(--text); border-color: var(--accent); }
-.dots { display: flex; gap: 5px; }
-.dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line-2); transition: all 240ms ease; }
-.dots i.on { background: var(--accent); width: 15px; border-radius: 3px; }
+.fc-face span { font: 600 9px 'IBM Plex Mono', monospace; color: var(--text-faint); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+.fc-back { transform: rotateY(180deg); color: var(--accent-2); }
+.fc-row { display: flex; gap: 7px; justify-content: center; }
+.fc-done { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; }
+.fc-done b { font-size: 14px; color: var(--good); }
+.fc-done span { font: 500 10px 'IBM Plex Mono', monospace; color: var(--text-faint); }
+.fc-done .fc-row { margin-top: 10px; }
 
-/* ---- Podcast ---- */
-.podw { display: flex; flex-direction: column; height: 100%; }
-.podw .pod { flex: 0 0 auto; height: auto; }
-.podw:not(:has(.pod-ch)) .pod { flex: 1; }
-.pod { display: flex; gap: 13px; height: 100%; padding: 12px 14px; align-items: center; }
-.pod-art { flex: 0 0 auto; width: min(72px, 32%); aspect-ratio: 1; border-radius: 14px; background: linear-gradient(140deg, #6d3df0, #a855f7 55%, #ec4899); display: grid; place-items: center; box-shadow: 0 8px 22px rgba(150, 80, 250, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
-.pod-art svg { width: 42%; height: 42%; color: rgba(255, 255, 255, 0.92); }
-.pod-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+/* ---------------- deck ---------------- */
+.deck { height: 100%; display: flex; flex-direction: column; padding: 10px 12px 10px; outline: none; }
+.deck:fullscreen { padding: 32px 48px; background: var(--bg); }
+.deck-stage { flex: 1; min-height: 0; display: flex; }
+.deck-slide {
+  flex: 1; min-height: 0; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 13px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
+  padding: 22px 26px;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+  animation: slideAdvance 340ms var(--ease-out);
+}
+@keyframes slideAdvance { from { opacity: 0; transform: translateX(14px); } }
+.deck-slide .sl > * { animation: rise 420ms var(--ease-out) 60ms backwards; }
+.sl { height: 100%; display: flex; flex-direction: column; }
+.sl h1 { font-size: clamp(20px, 3.4vw, 40px); font-weight: 600; letter-spacing: -0.6px; line-height: 1.15; }
+.sl h2 {
+  font-size: clamp(14px, 1.7vw, 22px); font-weight: 600; letter-spacing: -0.2px;
+  color: var(--text); padding-bottom: 8px; margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.sl-title { align-items: flex-start; justify-content: center; gap: 10px; }
+.sl-title p { font-size: clamp(12px, 1.4vw, 17px); color: var(--text-dim); max-width: 40ch; line-height: 1.5; }
+.sl-quote { align-items: center; justify-content: center; text-align: center; gap: 14px; }
+.sl-quote blockquote {
+  border: 0; padding: 0; margin: 0; font-style: normal;
+  font-size: clamp(15px, 2.2vw, 28px); font-weight: 500; line-height: 1.35; color: var(--text);
+  max-width: 26ch;
+}
+.sl-quote blockquote::before { content: '“'; color: var(--accent); margin-right: 2px; }
+.sl-quote blockquote::after { content: '”'; color: var(--accent); }
+.sl-quote cite { font-style: normal; font: 500 11px 'IBM Plex Mono', monospace; color: var(--text-faint); letter-spacing: 0.6px; }
+.sl-bullets ul { display: flex; flex-direction: column; gap: 12px; padding-left: 4px; margin-top: 4px; list-style: none; }
+.sl-bullets li {
+  position: relative; padding-left: 22px;
+  font-size: clamp(12px, 1.35vw, 17px); line-height: 1.45; color: var(--text);
+}
+.sl-bullets li::before {
+  content: ''; position: absolute; left: 2px; top: 0.55em;
+  width: 7px; height: 7px; border-radius: 2px; background: var(--accent);
+}
+.sl-body, .sl-col { font-size: clamp(11.5px, 1.15vw, 14px); line-height: 1.6; color: var(--text-dim); min-width: 0; }
+.sl-body > *:first-child, .sl-col > *:first-child { margin-top: 0; }
+.sl-body strong, .sl-col strong { color: var(--text); }
+.sl-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; flex: 1; min-height: 0; }
+.sl-body .viz, .sl-col .viz { margin: 6px 0; }
+/* a slide should not scroll — fit the visual to the slide, and give it the
+   room it deserves when actually presenting */
+.sl-body .viz svg, .sl-col .viz svg { max-height: 300px; }
+.deck:fullscreen .sl-body .viz svg, .deck:fullscreen .sl-col .viz svg { max-height: 62vh; }
+.deck:fullscreen .deck-slide { padding: 40px 56px; }
+
+/* an image slide is the picture, with the title floated over it */
+.sl-image { position: relative; padding: 0; margin: -22px -26px; height: calc(100% + 44px); }
+.sl-image h2 {
+  position: absolute; left: 26px; right: 26px; top: 20px; z-index: 2;
+  border: 0; padding: 0; margin: 0;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.85);
+}
+.sl-image .sl-body { height: 100%; }
+.sl-image .genimg { margin: 0; height: 100%; border: 0; border-radius: 0; }
+.sl-image .genimg img { height: 100%; object-fit: cover; }
+.sl-image .genimg-wait { height: 100%; aspect-ratio: auto; }
+.sl-image figcaption {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  border: 0; padding: 26px 26px 16px; font-size: 12px; color: var(--text-dim);
+  background: linear-gradient(180deg, transparent, rgba(10, 12, 16, 0.92));
+}
+
+.deck-notes {
+  flex: 0 0 auto; margin-top: 8px; padding: 8px 11px;
+  border-radius: 9px; border: 1px solid rgba(240, 168, 60, 0.3);
+  background: rgba(240, 168, 60, 0.06);
+  font-size: 11.5px; line-height: 1.55; color: var(--text-dim);
+  max-height: 26%; overflow-y: auto; scrollbar-width: thin;
+}
+.deck-notes b {
+  display: block; margin-bottom: 3px;
+  font: 600 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.1px; color: var(--warn);
+}
+.deck-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; padding-top: 9px; }
+.dbtn {
+  min-width: 26px; height: 24px; padding: 0 7px;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--fill-1); color: var(--text-dim);
+  font: 500 12px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  display: grid; place-items: center;
+  transition: all 140ms ease;
+}
+.dbtn.wide { font: 500 9.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.9px; }
+.dbtn:hover:not(:disabled) { color: var(--text); border-color: var(--accent); background: rgba(93, 135, 255, 0.08); }
+.dbtn:disabled { opacity: 0.3; cursor: default; }
+.dbtn.on { color: var(--warn); border-color: rgba(240, 168, 60, 0.45); background: rgba(240, 168, 60, 0.08); }
+.deck-dots { display: flex; gap: 5px; align-items: center; flex: 1; flex-wrap: wrap; }
+.deck-dots i {
+  width: 7px; height: 7px; border-radius: 50%; cursor: pointer;
+  background: var(--line-2); transition: all 160ms ease;
+}
+.deck-dots i:hover { background: var(--text-faint); transform: scale(1.25); }
+.deck-dots i.on { background: var(--accent); width: 16px; border-radius: 4px; }
+.deck-count { font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); }
+.deck-drafthead { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+.deck-thumb-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 7px; border-radius: 7px; }
+.deck-thumb-row em { font: 600 9px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); min-width: 14px; }
+.deck-thumb-row b { flex: 1; font-size: 11.5px; font-weight: 500; }
+.deck-thumb-row i {
+  font-style: normal; font: 500 8.5px 'IBM Plex Mono', monospace;
+  color: var(--text-faint); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+}
+
+/* ---------------- podcast ---------------- */
+.podw { height: 100%; display: flex; flex-direction: column; padding: 10px 12px 12px; gap: 8px; }
+.pod { display: flex; gap: 12px; align-items: center; }
+.pod-art {
+  width: 52px; height: 52px; flex: 0 0 auto; border-radius: 12px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, hsl(330 60% 45% / 0.5), hsl(280 60% 40% / 0.45));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.pod-art svg { width: 22px; height: 22px; color: #fff; }
+.pod-info { flex: 1; min-width: 0; }
 .pod-title { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pod-sub { font-size: 10.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pod-wave { display: flex; align-items: center; gap: 2px; height: 26px; margin: 3px 0; overflow: hidden; }
-.pod-wave i { flex: 1; min-width: 2px; height: var(--h); border-radius: 2px; background: linear-gradient(180deg, #a78bfa, #7c3aed); opacity: 0.4; }
-.pod-wave.live i { animation: wave 900ms ease-in-out infinite; animation-delay: var(--d); opacity: 0.85; }
-@keyframes wave { 50% { transform: scaleY(0.3); } }
+.pod-sub { font-size: 10px; color: var(--text-faint); margin: 1px 0 7px; }
 .pod-row { display: flex; align-items: center; gap: 9px; }
-.pod-play { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%; border: 0; background: #fff; color: #141820; font-size: 10px; cursor: pointer; display: grid; place-items: center; transition: transform 150ms ease; }
-.pod-play:hover { transform: scale(1.08); }
-.pod-track { flex: 1; height: 4px; border-radius: 4px; background: var(--fill-2); overflow: hidden; }
-.pod-track i { display: block; height: 100%; background: linear-gradient(90deg, #8b5cf6, #ec4899); border-radius: 4px; }
-.pod-time { font: 400 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); white-space: nowrap; }
-.pod-ch { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 12px 12px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: none; border-top: 1px solid var(--line); margin: 0 4px; }
-.pod-cr { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; text-align: left; padding: 7px 9px; color: var(--text-dim); font: 400 11px 'IBM Plex Sans', sans-serif; }
-.pod-cr em { font: 500 9px 'IBM Plex Mono', monospace; font-style: normal; color: #b39dfa; flex: 0 0 30px; }
-.pod-cr span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pod-cr i { opacity: 0; font-style: normal; color: #b39dfa; transition: opacity 150ms ease, transform 150ms ease; }
-.pod-cr:hover i { opacity: 1; transform: translateX(2px); }
-
-/* ---- Flashcards ---- */
-.fc { display: flex; flex-direction: column; height: 100%; padding: 12px 14px; gap: 9px; }
-.fc-topic { font: 600 9.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-faint); }
-.fc-stage { flex: 1; min-height: 0; perspective: 900px; }
-.fc-card { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 600ms var(--ease-spring); cursor: pointer; }
-.fc-card.flip { transform: rotateY(180deg); }
-.fc-face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 13px; display: flex; flex-direction: column; justify-content: center; padding: 15px 18px; gap: 8px; font-size: clamp(11.5px, 2.4cqw, 14.5px); line-height: 1.5; }
-.fc-face span { font: 600 10px 'IBM Plex Mono', monospace; opacity: 0.6; }
-.fc-front { background: linear-gradient(150deg, #2b2410, #1b1708); border: 1px solid rgba(240, 200, 90, 0.32); color: #f0dfae; }
-.fc-back { background: linear-gradient(150deg, #0f231b, #0a1710); border: 1px solid rgba(70, 224, 170, 0.32); color: #c9f2df; transform: rotateY(180deg); }
-.fc-row { display: flex; gap: 7px; }
-.chipbtn { flex: 1; height: 29px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel); color: var(--text-dim); font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer; transition: all 150ms ease; }
-.chipbtn:hover { color: var(--text); border-color: var(--line-2); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
-.chipbtn.deep { color: #c9b8ff; border-color: rgba(124, 58, 237, 0.35); }
-.chipbtn.deep:hover { background: rgba(124, 58, 237, 0.06); }
-
-/* ---- Relationships ---- */
-.rel { position: relative; height: 100%; padding: 6px; }
-.rel svg { display: block; }
-.rel-edge { fill: none; stroke: rgba(255, 255, 255, 0.2); stroke-width: 1.3; }
-.rel-node { cursor: pointer; transition: opacity 300ms ease; animation: node-in 560ms var(--ease-spring) backwards; }
-.rel-node circle.core { opacity: 0.95; }
-.rel-node circle.halo { fill: none; stroke-width: 1; opacity: 0.3; }
-.rel-node:hover circle.core { filter: brightness(1.08) saturate(1.15); }
-.rel-node:hover circle.halo { opacity: 0.75; }
-.rel-node.sel circle.halo { opacity: 1; stroke-width: 2; animation: sel-pulse 2s ease-in-out infinite; }
-.rel-node.sel circle.core { r: 19; }
-@keyframes sel-pulse { 50% { opacity: 0.3; } }
-@keyframes node-in { from { opacity: 0; transform: scale(0.55); } }
-.rel.hassel .rel-node:not(.sel) { opacity: 0.4; }
-.rel-init { fill: #0a1016; font: 700 10px 'IBM Plex Sans', sans-serif; text-anchor: middle; }
-.rel-name { fill: var(--text); font: 600 10px 'IBM Plex Sans', sans-serif; text-anchor: middle; }
-.rel-role { fill: var(--text-faint); font: 400 8.5px 'IBM Plex Sans', sans-serif; text-anchor: middle; }
-.rel-legend { position: absolute; bottom: 9px; left: 14px; display: flex; gap: 12px; font-size: 9.5px; color: var(--text-dim); }
-.rel-legend span { display: inline-flex; align-items: center; gap: 4px; }
-.rel-legend i { width: 7px; height: 7px; border-radius: 50%; }
-.rel-hint { position: absolute; bottom: 9px; right: 14px; font-size: 9px; color: var(--text-faint); }
-.rel-acct { position: absolute; top: 9px; left: 14px; font: 600 9px 'IBM Plex Mono', monospace; letter-spacing: 1.2px; text-transform: uppercase; color: #4ce0b0; }
-
-/* ---- Territory: petri dish ---- */
-.terv { display: flex; flex-direction: column; height: 100%; }
-.terv-top { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 14px 2px; }
-.terv-bc { display: flex; align-items: center; gap: 6px; font: 600 10px 'IBM Plex Mono', monospace; }
-.terv-bc button { border: 0; background: transparent; cursor: pointer; color: var(--accent); font: inherit; padding: 3px 6px; border-radius: 6px; letter-spacing: 0.5px; }
-.terv-bc button:hover { background: rgba(93, 135, 255, 0.08); }
-.terv-bc s { text-decoration: none; color: var(--text-faint); }
-.terv-bc b { color: var(--text); letter-spacing: 0.5px; }
-.seg { display: flex; background: var(--fill-1); border: 1px solid var(--line); border-radius: 9px; padding: 2px; }
-.seg button {
-  border: 0; background: transparent; color: var(--text-faint);
-  font: 600 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
-  padding: 5px 11px; border-radius: 7px; cursor: pointer;
-  transition: all 170ms ease;
+.pod-play {
+  width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%;
+  border: 0; background: #fff; color: #111; cursor: pointer;
+  font-size: 11px; display: grid; place-items: center;
+  transition: transform 140ms ease, opacity 140ms ease;
 }
-.seg button.on { background: var(--panel); color: #4ce0b0; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
-.terv-total { margin-left: auto; font: 500 10px 'IBM Plex Mono', monospace; color: var(--text-dim); }
-.terv-total b { color: #4ce0b0; font-weight: 600; }
-.terv-legend { flex: 0 0 auto; display: flex; gap: 13px; padding: 4px 16px 9px; font-size: 9.5px; color: var(--text-dim); }
-.terv-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.terv-legend i { width: 7px; height: 7px; border-radius: 50%; }
-.terv-hint { margin-left: auto; opacity: 0.8; }
-.petri { position: relative; flex: 1; min-height: 0; }
-.dish {
-  position: absolute; border-radius: 50%;
-  background:
-    radial-gradient(circle at 32% 26%, rgba(140, 200, 235, 0.05), transparent 55%),
-    radial-gradient(circle at 50% 50%, #141922, #0d1118 78%);
-  box-shadow:
-    inset 0 0 70px rgba(0, 0, 0, 0.55),
-    inset 0 2px 1px rgba(255, 255, 255, 0.06),
-    0 0 0 1px rgba(255, 255, 255, 0.07),
-    0 0 0 7px rgba(255, 255, 255, 0.018),
-    0 24px 60px rgba(0, 0, 0, 0.4);
+.pod-play:hover:not(:disabled) { transform: scale(1.08); }
+.pod-play:disabled { opacity: 0.4; cursor: default; }
+.pod-track { flex: 1; height: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.pod-track i { display: block; height: 100%; background: hsl(330 80% 70%); border-radius: 3px; transition: width 300ms ease; }
+.pod-time { font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); }
+.pod-nott { font-size: 10px; color: var(--warn); margin-top: 5px; }
+.pod-lines { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.pod-ln {
+  display: flex; gap: 8px; align-items: flex-start; text-align: left;
+  border: 0; border-radius: 8px; background: transparent;
+  color: var(--text-dim); font: 400 11px 'IBM Plex Sans', sans-serif;
+  line-height: 1.45; padding: 5px 8px; cursor: pointer;
+  transition: background 130ms ease, color 130ms ease;
 }
-.dish::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: repeating-radial-gradient(circle at 50% 50%, transparent 0 34px, rgba(255, 255, 255, 0.025) 34px 35px); }
-.cat {
-  position: absolute; border-radius: 50%;
-  border: 1.2px dashed hsl(var(--ch) 70% 62% / 0.45);
-  background: radial-gradient(circle at 35% 30%, hsl(var(--ch) 75% 50% / 0.09), hsl(var(--ch) 75% 45% / 0.02) 72%);
-  transition: left 750ms var(--ease-spring), top 750ms var(--ease-spring), width 750ms var(--ease-spring), height 750ms var(--ease-spring), opacity 400ms ease, border-color 200ms ease, box-shadow 200ms ease;
-  animation: cat-in 700ms var(--ease-spring) backwards;
-  transform-origin: center;
+.pod-ln:hover { background: var(--fill-1); color: var(--text); }
+.pod-ln.on { background: hsl(var(--h, 330) 70% 60% / 0.1); color: var(--text); box-shadow: inset 2px 0 0 hsl(var(--h, 330) 80% 65% / 0.7); }
+.pod-ln em {
+  flex: 0 0 auto; font-style: normal; font: 600 8.5px 'IBM Plex Mono', monospace;
+  border-radius: 5px; padding: 1.5px 5px; margin-top: 1px;
 }
-.cat:hover { border-style: solid; box-shadow: 0 0 0 4px hsl(var(--ch) 70% 50% / 0.08); }
-@keyframes cat-in { from { opacity: 0; transform: scale(0.7); } }
-.cat > b { position: absolute; top: 9%; left: 50%; transform: translateX(-50%); font: 600 9px 'IBM Plex Mono', monospace; letter-spacing: 1px; text-transform: uppercase; color: hsl(var(--ch) 85% 74%); white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
-.cat > em { position: absolute; top: calc(9% + 13px); left: 50%; transform: translateX(-50%); font: 500 8.5px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); white-space: nowrap; }
-.acct {
-  position: absolute; border-radius: 50%;
-  display: grid; place-items: center; text-align: center;
-  padding: 4px; overflow: hidden;
-  font: 600 9.5px/1.15 'IBM Plex Sans', sans-serif; color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  background: radial-gradient(circle at 32% 26%, hsl(var(--ah) 75% 62%), hsl(var(--ah) 70% 42%) 75%);
-  box-shadow:
-    0 6px 16px hsl(var(--ah) 70% 45% / 0.35),
-    inset 0 -5px 12px rgba(0, 0, 0, 0.18),
-    inset 0 3px 7px rgba(255, 255, 255, 0.45),
-    0 0 0 2px var(--ring);
-  transition: left 800ms var(--ease-spring), top 800ms var(--ease-spring), width 800ms var(--ease-spring), height 800ms var(--ease-spring), transform 250ms ease, box-shadow 250ms ease;
-  animation: cat-in 800ms var(--ease-spring) backwards;
-  transform-origin: center;
-}
-.acct:hover { transform: scale(1.08); z-index: 6; box-shadow: 0 10px 26px hsl(var(--ah) 70% 45% / 0.5), inset 0 -5px 12px rgba(0, 0, 0, 0.18), inset 0 3px 7px rgba(255, 255, 255, 0.45), 0 0 0 2px var(--ring); }
-.acct small { display: block; font: 500 8px 'IBM Plex Mono', monospace; color: rgba(255, 255, 255, 0.85); margin-top: 1px; }
-.acct.ctxsel::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid rgba(93, 135, 255, 0.75); animation: sel-pulse 2s ease-in-out infinite; }
-.acct.detail { cursor: default; padding: 10px; }
-.acct.detail:hover { transform: none; }
-.petri .hide { opacity: 0 !important; transform: scale(0.55); pointer-events: none; }
-.acct-d { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 100%; }
-.acct-d b { font-size: clamp(13px, 3.4cqw, 19px); line-height: 1.15; }
-.acct-d i { font: 500 10px 'IBM Plex Mono', monospace; font-style: normal; color: rgba(255, 255, 255, 0.85); }
-.acct-d strong { font-size: clamp(17px, 4.4cqw, 26px); font-weight: 700; }
-.acct-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
-.acct-chips em { font: 600 8.5px 'IBM Plex Mono', monospace; font-style: normal; text-transform: uppercase; letter-spacing: 0.6px; background: rgba(0, 0, 0, 0.25); border-radius: 999px; padding: 3px 8px; color: #fff; }
-.acct-chips .hh-good { color: #b8ffe2; } .acct-chips .hh-warn { color: #ffe4b0; } .acct-chips .hh-risk { color: #ffc9d8; }
-.acct-d u { text-decoration: none; font-size: 9.5px; color: #fff; background: rgba(0, 0, 0, 0.2); border-radius: 8px; padding: 4px 9px; max-width: 92%; }
+.pod-ln.hA em { color: #ffa8d0; border: 1px solid rgba(255, 105, 180, 0.35); }
+.pod-ln.hB em { color: #8caaff; border: 1px solid rgba(93, 135, 255, 0.4); }
 
-/* ---- Account plan v2 ---- */
-.ap { height: 100%; overflow-y: auto; padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
-.ap-acct { font-size: 13px; font-weight: 600; color: #6fd8e8; }
-.ap-meta { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-dim); }
-.ap-cols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 6px 26px; flex: 1; min-height: 0; align-content: start; }
-.ap-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.ap.wide { justify-content: flex-start !important; gap: 10px; }
-.ap-vitals { display: flex; align-items: center; gap: 14px; }
-.ap-donut { width: 62px; height: 62px; flex: 0 0 auto; }
-.ap-donut-t { fill: var(--text); font: 700 15px 'IBM Plex Sans', sans-serif; text-anchor: middle; }
-.ap-stats { display: flex; gap: 18px; flex-wrap: wrap; }
-.ap-stats b { display: block; font-size: 14px; font-weight: 600; }
-.ap-stats span { font: 500 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-faint); }
-.ap-bars { display: flex; gap: 7px; align-items: flex-end; height: 58px; padding-top: 2px; }
-.ap-bar { flex: 1; max-width: 34px; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
-.ap-bar i { width: 100%; margin-top: auto; border-radius: 4px 4px 2px 2px; background: linear-gradient(180deg, rgba(93, 135, 255, 0.75), rgba(93, 135, 255, 0.3)); transition: height 600ms var(--ease-spring); }
-.ap-bar span { font: 500 8px 'IBM Plex Mono', monospace; color: var(--text-faint); }
-.ap-sec h4 { font: 600 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.3px; color: var(--text-faint); margin-bottom: 7px; }
-.ap-obj { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.45; color: var(--text); padding: 3px 0; }
-.ap-obj input { accent-color: var(--accent); margin-top: 2px; }
-.ap-obj input:checked + span { color: var(--text-faint); text-decoration: line-through; }
-.ap-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.risk { font-size: 10.5px; color: #ff9fc0; background: rgba(220, 47, 106, 0.07); border: 1px solid rgba(220, 47, 106, 0.28); border-radius: 999px; padding: 4px 10px; }
-.risk.zap:hover { background: rgba(220, 47, 106, 0.12); box-shadow: 0 0 0 4px rgba(220, 47, 106, 0.06); color: #ffc4d8; }
-.ap ol { padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text); }
-.ap ol li::marker { color: var(--accent); font: 500 10px 'IBM Plex Mono', monospace; }
-.ap-touches { display: flex; flex-direction: column; gap: 4px; }
-.ap-touch { display: flex; align-items: flex-start; gap: 9px; width: 100%; border: 0; background: transparent; text-align: left; padding: 6px 7px; border-radius: 9px; cursor: pointer; color: var(--text); }
-.ap-touch i { width: 22px; height: 22px; flex: 0 0 auto; border-radius: 7px; display: grid; place-items: center; font-style: normal; font-size: 10px; }
-.ap-touch i.tt-good { background: rgba(15, 157, 106, 0.1); color: var(--good); border: 1px solid rgba(15, 157, 106, 0.3); }
-.ap-touch i.tt-warn { background: rgba(232, 160, 32, 0.12); color: #f3c169; border: 1px solid rgba(232, 160, 32, 0.35); }
-.ap-touch i.tt-risk { background: rgba(220, 47, 106, 0.08); color: var(--bad); border: 1px solid rgba(220, 47, 106, 0.3); }
-.ap-touch b { display: block; font-size: 11px; font-weight: 600; }
-.ap-touch b em { font-style: normal; font-weight: 400; color: var(--text-faint); font-size: 9.5px; }
-.ap-touch span { display: block; font-size: 10.5px; line-height: 1.4; color: var(--text-dim); }
-
-/* ---- Call prep ---- */
-.cp { height: 100%; overflow-y: auto; padding: 11px 15px 14px; display: flex; flex-direction: column; gap: 11px; scrollbar-width: none; }
-.cp-when { font: 600 9px 'IBM Plex Mono', monospace; letter-spacing: 1px; text-transform: uppercase; color: var(--warn); }
-.cp-title { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; margin-top: -5px; }
-.cp-goal { border-left: 3px solid #e8a020; background: rgba(232, 160, 32, 0.09); border-radius: 4px 10px 10px 4px; padding: 8px 11px; font-size: 11.5px; line-height: 1.5; color: #f0dcb4; }
-.cp-goal span { display: block; font: 600 8px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; color: var(--warn); margin-bottom: 2px; }
-.cp-with { display: flex; flex-wrap: wrap; gap: 6px; }
-.cp-att { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; background: var(--panel); color: var(--text); font: 500 10.5px 'IBM Plex Sans', sans-serif; padding: 4px 11px; transition: all 150ms ease; }
-.cp-att:hover { border-color: rgba(232, 160, 32, 0.55); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3); }
-.cp-intel { list-style: none; display: flex; flex-direction: column; gap: 5px; }
-.cp-intel li { font-size: 11px; line-height: 1.45; color: var(--text-dim); padding-left: 15px; position: relative; }
-.cp-intel li::before { content: '◆'; position: absolute; left: 0; font-size: 7px; top: 0.45em; color: #e8a020; }
-
-/* ---- Pipeline ---- */
-.pipe { display: flex; gap: 10px; height: 100%; padding: 10px 14px 14px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
-.pipe-col { flex: 1; min-width: 120px; display: flex; flex-direction: column; gap: 7px; }
-.pipe-head { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 5px 6px; border-bottom: 1px solid var(--line); }
-.pipe-head span { font: 600 9.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); }
-.pipe-head em { font: 500 9.5px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); }
-.pipe-head.zap:hover span { color: var(--text); }
-.deal { position: relative; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid #7d8bff; padding: 8px 10px; transition: all 180ms ease; animation: msg-in 400ms var(--ease-spring) backwards; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
-.deal:hover { border-color: var(--line-2); border-left-color: #93a0ff; transform: translateY(-2px); box-shadow: var(--sh-md); }
-.deal.ctx { border-color: rgba(93, 135, 255, 0.5); border-left-color: var(--accent); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.07); }
-.deal b { display: block; font-size: 11px; margin-bottom: 2px; }
-.deal span { display: block; font-size: 9.5px; color: var(--text-faint); margin-bottom: 4px; }
-.deal em { font: 500 10.5px 'IBM Plex Mono', monospace; font-style: normal; color: #93a0ff; }
-.deal-x { display: none; align-items: center; gap: 6px; margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 9.5px; color: var(--text-dim); }
-.deal-x em { margin-left: auto; font: 500 9px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); }
-.deal.open .deal-x { display: flex; animation: msg-in 300ms var(--ease-spring); }
-.pipe-empty { font-size: 10px; color: var(--text-faint); text-align: center; padding: 14px 0; border: 1px dashed var(--line); border-radius: 10px; }
-.pipe-funnel { display: flex; flex-direction: column; justify-content: center; gap: 10px; height: 100%; padding: 12px 16px; }
-.pf-row { display: flex; align-items: center; gap: 9px; }
-.pf-row span { flex: 0 0 68px; font-size: 10.5px; color: var(--text-dim); }
-.pf-bar { flex: 1; height: 13px; border-radius: 7px; background: var(--fill-2); overflow: hidden; }
-.pf-bar i { display: block; height: 100%; border-radius: 7px; background: linear-gradient(90deg, #93a0ff, #818cf8); transition: width 750ms var(--ease-spring); }
-.pf-row em { font: 500 9.5px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-dim); white-space: nowrap; }
-
-/* ---- Pricing ---- */
-.price { height: 100%; display: flex; flex-direction: column; padding: 10px 16px 14px; gap: 10px; overflow: hidden; }
-.price-acct { font-size: 12.5px; font-weight: 600; color: #ff8fc5; }
-.price-opp { display: block; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-dim); margin-top: 3px; }
-.price-lines { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; scrollbar-width: none; }
-.pl { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: 9px; padding: 6px 4px; border-bottom: 1px dashed var(--line); font-size: 11.5px; }
-.pl-sku { font: 500 9.5px 'IBM Plex Mono', monospace; color: #ff8fc5; flex: 0 0 auto; }
-.pl-desc { flex: 1; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pl-amt { font: 500 11px 'IBM Plex Mono', monospace; color: var(--text-dim); }
-.pl-x { display: none; flex-basis: 100%; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-dim); padding-top: 5px; }
-.pl.open .pl-x { display: block; animation: msg-in 280ms var(--ease-spring); }
-.price-disc { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-dim); }
-.price-disc b { color: #ff8fc5; }
-.price-disc input { flex: 1; accent-color: #db2777; }
-.price-tot { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 9px; }
-.price-tot div { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); }
-.price-tot em { font: 500 12px 'IBM Plex Mono', monospace; font-style: normal; }
-.price-tot .net { font-weight: 600; color: var(--text); }
-.price-tot .net em { font-size: 16px; color: #4ce0b0; }
-
-/* resize min/max guides — float above everything while pulling */
-.rz-guide { position: absolute; z-index: 45; border: 2px dashed rgba(255, 255, 255, 0.7); border-radius: var(--r); pointer-events: none; opacity: 0; transition: opacity 160ms ease; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.35); }
-.rz-guide.max { border-color: rgba(255, 255, 255, 0.32); }
-.rz-guide span { position: absolute; top: -9px; left: 12px; font: 700 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px; color: #fff; background: rgba(10, 12, 16, 0.85); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px; padding: 2px 7px; }
-.rz-guide.max span { top: auto; left: auto; bottom: -9px; right: 12px; }
-#rz-dims { position: absolute; z-index: 46; pointer-events: none; opacity: 0; transition: opacity 150ms ease; font: 700 10px 'IBM Plex Mono', monospace; letter-spacing: 1px; color: #fff; background: rgba(10, 12, 16, 0.9); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; padding: 3px 8px; }
-.tile.rz-x, .tile.rz-x .tile-head { cursor: ew-resize; }
-.tile.rz-y, .tile.rz-y .tile-head { cursor: ns-resize; }
-
-/* sonar waves: white = you hit a limit · tinted = the AI just reshaped this tile */
-.wave {
-  position: absolute; z-index: 44; pointer-events: none;
-  border-radius: 50%;
-  border: 1.5px solid var(--wc, rgba(255, 255, 255, 0.6));
-  transform: translate(-50%, -50%) scale(0.35);
-  animation: waveout var(--wd, 560ms) cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
-}
-@keyframes waveout {
-  from { transform: translate(-50%, -50%) scale(0.35); opacity: 0.85; }
-  to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
-}
-
-/* opportunity card */
-.oc { height: 100%; padding: 11px 15px 13px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
-.oc-top { display: flex; align-items: center; gap: 8px; font: 600 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.1px; color: #a89bff; }
-.oc-top .hdot { margin-left: auto; }
-.oc-name { font-size: 14.5px; font-weight: 600; letter-spacing: -0.2px; line-height: 1.2; }
-.oc-val { display: flex; align-items: baseline; gap: 10px; font-size: 23px; font-weight: 700; }
-.oc-val span { font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); }
-.oc-stage { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
-.oc-stage i { flex: 1; height: 4px; border-radius: 3px; background: var(--fill-2); }
-.oc-stage i.done { background: rgba(150, 135, 255, 0.5); }
-.oc-stage i.now { background: #a89bff; box-shadow: 0 0 9px rgba(150, 135, 255, 0.55); }
-.oc-stage b { font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.8px; color: #c9c2ff; margin-left: 5px; }
-.oc-sum { font-size: 11px; line-height: 1.55; color: var(--text-dim); }
-.oc-next { display: flex; gap: 9px; align-items: center; text-align: left; border: 0; background: rgba(150, 135, 255, 0.09); border-left: 3px solid #a89bff; border-radius: 4px 9px 9px 4px; padding: 7px 11px; color: var(--text); font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer; }
-.oc-next span { font: 600 8px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; color: #a89bff; }
-.oc-act { display: flex; gap: 7px; margin-top: auto; }
-.oc-act button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 32px; border-radius: 9px; border: 1px solid var(--line); background: var(--fill-1); color: var(--text); font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer; transition: all 150ms ease; }
-.oc-act button svg { width: 12px; height: 12px; opacity: 0.85; }
-.oc-act button:hover { border-color: var(--line-2); background: var(--fill-2); transform: translateY(-1px); }
-
-/* call review */
-.cr { height: 100%; padding: 11px 15px 13px; display: flex; flex-direction: column; gap: 11px; overflow-y: auto; scrollbar-width: none; }
-.cr-head { display: flex; gap: 12px; align-items: center; }
-.cr-ring { width: 46px; height: 46px; flex: 0 0 auto; }
-.cr-ring text { fill: var(--text); font: 700 12px 'IBM Plex Sans', sans-serif; text-anchor: middle; }
-.cr-id { min-width: 0; }
-.cr-id b { display: block; font-size: 13px; font-weight: 600; }
-.cr-id > span { display: block; font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); margin-top: 1px; }
-.cr-with { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
-.cr-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.cr-cols h5 { font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-faint); margin-bottom: 6px; }
-.cr-cols ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
-.cr-cols li { font-size: 10.5px; line-height: 1.45; padding: 2px 5px 2px 15px; position: relative; color: var(--text); }
-.cr-win li::before { content: '✓'; position: absolute; left: 1px; color: var(--good); font-size: 9px; }
-.cr-con li::before { content: '!'; position: absolute; left: 3px; color: #e8a020; font-weight: 700; font-size: 10px; }
-.cr-com { display: flex; flex-direction: column; gap: 5px; }
-.cr-cm { display: flex; align-items: baseline; gap: 9px; width: 100%; border: 1px solid var(--line); background: var(--fill-1); border-radius: 9px; padding: 7px 10px; text-align: left; cursor: pointer; color: var(--text); }
-.cr-cm b { font: 600 9px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.6px; color: #ff8f8f; flex: 0 0 auto; }
-.cr-cm span { flex: 1; min-width: 0; font-size: 11px; }
-.cr-cm em { font: 500 9px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); }
-
-/* pricing v2: configurator */
-.pr-ctl { display: flex; gap: 8px; flex-wrap: wrap; }
-.pl.v2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 7px 4px; }
-.pl-main { display: flex; align-items: baseline; gap: 9px; flex: 1 1 auto; min-width: 0; padding: 2px 4px; }
-.pl-tag { font: 500 8.5px 'IBM Plex Mono', monospace; color: var(--text-faint); border: 1px solid var(--line); border-radius: 5px; padding: 1.5px 6px; white-space: nowrap; }
-.pl.issvc .pl-tag { color: #f3c169; border-color: rgba(232, 160, 32, 0.35); }
-.pl-main .pl-amt { margin-left: auto; }
-.pl-size { display: inline-flex; align-items: center; gap: 7px; background: var(--fill-1); border: 1px solid var(--line); border-radius: 9px; padding: 2px 4px; }
-.pl-size b { font: 600 11px 'IBM Plex Mono', monospace; min-width: 42px; text-align: center; }
-.pl-size span { font-size: 9px; color: var(--text-faint); }
-.qb { width: 20px; height: 20px; border: 0; border-radius: 6px; background: var(--fill-2); color: var(--text); font-size: 13px; line-height: 1; cursor: pointer; transition: background 120ms ease, transform 120ms ease; }
-.qb:hover { background: rgba(93, 135, 255, 0.25); }
-.qb:active { transform: scale(0.9); }
-.pr-break { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 8px; max-width: 480px; }
-.price.v2 .price-disc { max-width: 480px; }
-.pr-break > div { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-dim); }
-.pr-break em { font: 500 11px 'IBM Plex Mono', monospace; font-style: normal; }
-.pr-break .dsc em { color: #ff9fc0; }
-.pr-break .net { font-weight: 600; color: var(--text); padding-top: 3px; }
-.pr-break .net em { font-size: 16px; color: #4ce0b0; }
-.pr-run { padding-top: 2px; }
-.pr-run span { font: 500 9.5px 'IBM Plex Mono', monospace; color: var(--text-faint); }
-.pr-run .dd { font: 600 8.5px 'IBM Plex Mono', monospace; font-style: normal; text-transform: uppercase; letter-spacing: 0.8px; color: #f3c169; border: 1px solid rgba(232, 160, 32, 0.4); background: rgba(232, 160, 32, 0.09); border-radius: 999px; padding: 2.5px 8px; }
-
-/* ---- Metrics ---- */
-.kpis { display: flex; gap: 10px; height: 100%; padding: 8px 14px 14px; align-items: stretch; }
-.kpi { flex: 1; min-width: 0; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); padding: 9px 12px; display: flex; flex-direction: column; justify-content: center; gap: 2px; transition: all 200ms ease; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
-.kpi:hover { transform: translateY(-2px); box-shadow: var(--sh-md); border-color: var(--line-2); }
-.kpi-label { font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; color: var(--text-faint); white-space: nowrap; overflow: hidden; }
-.kpi-val { font-size: 17px; font-weight: 700; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; color: var(--text); }
-.kpi-val em { font-size: 9.5px; font-style: normal; font-weight: 600; color: var(--good); }
-.kpi svg { width: 100%; max-height: 22px; margin-top: 3px; }
-.kpi polyline { fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; }
-.kpi polygon { fill: rgba(93, 135, 255, 0.1); }
-
-/* ---- Notes ---- */
-.notes { height: 100%; padding: 10px 16px 14px; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; }
-.notes-title { font-size: 12.5px; font-weight: 600; color: #f2b25c; margin-bottom: 9px; }
-.notes ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.notes li { font-size: 11.5px; line-height: 1.45; color: var(--text); padding: 3px 6px 3px 16px; position: relative; }
-.notes li::before { content: ''; position: absolute; left: 1px; top: 0.6em; width: 6px; height: 6px; border: 1.4px solid #ea8a3a; border-radius: 2px; }
-
-/* ---- Profile ---- */
-.prof { height: 100%; overflow-y: auto; padding: 12px 15px 14px; display: flex; flex-direction: column; gap: 11px; scrollbar-width: none; }
-.prof-head { display: flex; gap: 12px; align-items: center; }
-.prof-ava { width: 46px; height: 46px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; font: 700 15px 'IBM Plex Sans', sans-serif; color: #fff; background: radial-gradient(circle at 32% 26%, #b06df5, #7c3aed 78%); box-shadow: 0 6px 16px rgba(124, 58, 237, 0.3), inset 0 2px 5px rgba(255, 255, 255, 0.4), 0 0 0 2px var(--sc); }
-.prof-id { min-width: 0; }
-.prof-id b { display: block; font-size: 14px; letter-spacing: -0.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.prof-id > span { display: block; font-size: 10.5px; color: var(--text-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.prof-tags { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
-.prof-sent { font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.8px; font-style: normal; color: var(--sc); border: 1px solid var(--sc); border-radius: 999px; padding: 2.5px 8px; }
-.prof-touch { font: 500 8.5px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); border: 1px solid var(--line); border-radius: 999px; padding: 2.5px 8px; }
-.prof-inf { display: flex; align-items: center; gap: 9px; font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; color: var(--text-faint); }
-.prof-bar { flex: 1; height: 5px; border-radius: 5px; background: var(--fill-2); overflow: hidden; }
-.prof-bar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #8b5cf6, #d946ef); transition: width 800ms var(--ease-spring); }
-.prof-inf em { font-style: normal; color: #c9b0ff; }
-.prof-bio { font-size: 11.5px; line-height: 1.6; color: var(--text); }
-.prof-sec h5 { font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.3px; color: var(--text-faint); margin-bottom: 6px; }
-.prof-tp { list-style: none; display: flex; flex-direction: column; gap: 5px; }
-.prof-tp li { font-size: 11.5px; line-height: 1.45; color: var(--text); padding: 2px 6px 2px 15px; position: relative; }
-.prof-tp li::before { content: ''; position: absolute; left: 0; top: 0.62em; width: 7px; height: 2px; border-radius: 2px; background: #a855f7; }
-.prof-conn { display: flex; flex-wrap: wrap; gap: 5px; }
-.prof-conn button { display: inline-flex; align-items: baseline; gap: 5px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; background: var(--panel); color: var(--text); font: 500 10.5px 'IBM Plex Sans', sans-serif; padding: 4.5px 10px; transition: all 150ms ease; }
-.prof-conn button span { font-size: 8.5px; color: var(--text-faint); }
-.prof-conn button:hover { border-color: rgba(124, 58, 237, 0.5); background: rgba(124, 58, 237, 0.05); transform: translateY(-1px); }
-.prof-sk { display: flex; flex-direction: column; gap: 9px; padding-top: 2px; }
-.skl { height: 10px; border-radius: 6px; background: linear-gradient(90deg, var(--fill-1) 25%, var(--fill-2) 50%, var(--fill-1) 75%); background-size: 200% 100%; animation: skl 1.4s linear infinite; }
-@keyframes skl { to { background-position: -200% 0; } }
-.prof-skcap { font-size: 10px; color: var(--text-faint); margin-top: 3px; animation: pulse 1.8s ease-in-out infinite; }
-
-/* ---- Strategy Map ---- */
-.smap { display: flex; flex-direction: column; height: 100%; padding: 8px 14px 12px; gap: 6px; }
-.smap-cols { display: flex; }
-.smap-cols span { flex: 1; text-align: center; font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.3px; color: var(--text-faint); }
-.smap-body { position: relative; flex: 1; min-height: 0; display: flex; gap: 8%; }
-.smap-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.sm-link { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 1.4; transition: stroke 220ms ease, stroke-width 220ms ease, opacity 220ms ease; }
-.smap-body.focused .sm-link { opacity: 0.22; }
-.smap-body.focused .sm-link.lit { opacity: 1; stroke: rgba(93, 135, 255, 0.75); stroke-width: 2; }
-.smap-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: clamp(10px, 4cqh, 26px); z-index: 1; }
-.sm-node { display: flex; align-items: center; gap: 7px; border-radius: 10px; padding: 8px 11px; background: var(--panel); border: 1px solid var(--line); font: 500 10.5px/1.35 'IBM Plex Sans', sans-serif; color: var(--text); transition: all 200ms ease; animation: msg-in 450ms var(--ease-spring) backwards; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
-.sm-node span { min-width: 0; }
-.sm-node em { margin-left: auto; font: 600 9.5px 'IBM Plex Mono', monospace; font-style: normal; color: #4ce0b0; white-space: nowrap; }
-.sm-node.g { border-left: 3px solid #e8a020; }
-.sm-node.i { border-left: 3px solid var(--accent); }
-.sm-node.o { border-left: 3px solid var(--good); }
-.smap-body.focused .sm-node { opacity: 0.38; }
-.smap-body.focused .sm-node.lit { opacity: 1; border-color: rgba(93, 135, 255, 0.5); box-shadow: var(--sh-md); transform: translateX(2px); }
-
-/* ---- Battlecard ---- */
-.bc { height: 100%; overflow-y: auto; padding: 10px 15px 14px; display: flex; flex-direction: column; gap: 11px; scrollbar-width: none; }
-.bc-head b { font-size: 14px; letter-spacing: -0.2px; }
-.bc-head > span { display: block; font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
-.bc-pres { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 10.5px; line-height: 1.4; border-radius: 9px; padding: 7px 10px; color: var(--text-dim); background: var(--fill-1); border: 1px solid var(--line); }
-.bc-pres i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-.bc-entrenched i { background: var(--bad); }
-.bc-circling i { background: #e8a020; }
-.bc-none i, .bc-lost i { background: var(--good); }
-.bc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.bc-sec h5 { font: 600 8.5px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.3px; color: var(--text-faint); margin-bottom: 6px; }
-.bc-sec ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
-.bc-sec li { font-size: 10.5px; line-height: 1.45; color: var(--text); padding-left: 15px; position: relative; }
-.bc-sec.win li::before { content: '✓'; position: absolute; left: 0; color: var(--good); font-size: 9px; }
-.bc-sec.lose li::before { content: '×'; position: absolute; left: 0; color: var(--bad); font-size: 11px; }
-.bc-land { padding-left: 17px; display: flex; flex-direction: column; gap: 5px; }
-.bc-land li { font-size: 10.5px; line-height: 1.45; color: #f4cd92; padding: 2px 4px; }
-.bc-land li::marker { color: #e8a020; font: 600 9px 'IBM Plex Mono', monospace; }
-.bc-counters { display: flex; flex-direction: column; gap: 5px; }
-.bc-c { border: 1px solid var(--line); text-align: left; border-radius: 10px; padding: 8px 11px; cursor: pointer; background: var(--panel); transition: all 170ms ease; }
-.bc-c b { display: block; font-size: 10.5px; color: #ff8fc5; }
-.bc-c span { display: none; font-size: 10.5px; line-height: 1.5; color: var(--text); margin-top: 5px; }
-.bc-c.open span { display: block; animation: msg-in 260ms var(--ease-spring); }
-.bc-c:hover { border-color: rgba(220, 47, 106, 0.4); }
-
-/* ---- onboarding ---- */
-#onboard {
-  position: fixed; inset: 0; z-index: 200;
-  display: grid; place-items: center;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(3px);
-  animation: ob-in 300ms ease;
-}
-#onboard.out { opacity: 0; transition: opacity 250ms ease; }
-@keyframes ob-in { from { opacity: 0; } }
-#ob-card {
-  width: min(460px, 90vw);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 18px;
+/* ---------------- toast ----------------
+   The app's own way of saying something went wrong. Never a native alert():
+   that steals focus and reads as a browser error rather than as the product. */
+#toast {
+  position: fixed; z-index: 300;
+  left: 50%; bottom: 26px;
+  transform: translate(-50%, 14px);
+  max-width: min(460px, 88vw);
+  padding: 10px 16px;
+  border-radius: 11px;
+  background: var(--panel); border: 1px solid var(--line-2);
   box-shadow: var(--sh-lg);
-  padding: 30px 32px 26px;
-  text-align: left;
-  animation: msg-in 420ms var(--ease-spring);
+  font: 500 12px 'IBM Plex Sans', sans-serif; color: var(--text);
+  opacity: 0; pointer-events: none;
+  transition: opacity 220ms ease, transform 320ms var(--ease-spring);
 }
-.ob-hi { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
-.ob-hi em { font-style: italic; font-size: 19px; font-weight: 500; color: var(--text-dim); letter-spacing: -0.2px; }
-.ob-glyph { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.5)); }
-#ob-card h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 16px; }
-.ob-row { display: flex; gap: 11px; align-items: flex-start; padding: 7px 0; }
-.ob-row i {
-  flex: 0 0 24px; height: 24px; border-radius: 8px;
-  display: grid; place-items: center;
-  font-style: normal; font-size: 11px;
-  color: var(--accent); background: rgba(93, 135, 255, 0.08);
-  border: 1px solid rgba(93, 135, 255, 0.22);
-}
-.ob-row span { font-size: 12.5px; line-height: 1.55; color: var(--text-dim); }
-.ob-row b { color: var(--text); font-weight: 600; }
-#ob-go {
-  margin-top: 18px; width: 100%; height: 42px;
-  border: 0; border-radius: 11px;
-  background: var(--accent); color: #fff;
-  font: 600 13px 'IBM Plex Sans', sans-serif;
-  cursor: pointer;
-  transition: transform 140ms ease, filter 140ms ease;
-}
-#ob-go:hover { filter: brightness(1.08); transform: translateY(-1px); }
+#toast.on { opacity: 1; transform: translate(-50%, 0); }
+#toast.bad { border-color: rgba(220, 47, 106, 0.5); }
+#toast.bad::before { content: '⚠ '; color: var(--bad); }
+#toast.good { border-color: rgba(46, 204, 139, 0.5); }
+#toast.good::before { content: '✓ '; color: var(--good); }
 
-/* ---- density (tall tiles) ---- */
-@container (min-height: 420px) {
-  .oc { justify-content: space-evenly; }
-  .oc-act { margin-top: 0; }
-  .oc-sum { font-size: 12px; }
-  .prof { justify-content: space-evenly; }
-  .prof-bio { font-size: 13px; }
-  .prof-tp li { font-size: 12.5px; }
-  .prof-ava { width: 56px; height: 56px; font-size: 18px; }
-  .price-lines { justify-content: space-evenly; }
-  .pl { font-size: 13px; padding: 10px 4px; }
-  .ap:not(.wide) { justify-content: space-evenly; }
-  .ap-obj { font-size: 13px; }
-  .ap ol, .ap ol li { font-size: 13px; }
-  .notes ul { flex: 1; justify-content: space-evenly; }
-  .notes li { font-size: 13px; }
+/* adding a step, in the list rather than in a dialog */
+.plan-new { display: flex; gap: 6px; margin-top: 6px; animation: rise var(--t-in) var(--ease-out); }
+.plan-new input {
+  flex: 1; min-width: 0; height: 30px;
+  border: 1px solid var(--accent); border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3); color: var(--text);
+  font: 400 11.5px 'IBM Plex Sans', sans-serif; padding: 0 10px; outline: none;
 }
-@container (min-height: 200px) {
-  .kpi svg { max-height: 36px; }
-  .kpi-val { font-size: 21px; }
+.plan-new button {
+  flex: 0 0 auto; height: 30px; padding: 0 12px;
+  border: 0; border-radius: 8px; background: var(--accent); color: #fff;
+  font: 600 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
 }
+.plan-new button:hover { filter: brightness(1.1); }
+
+/* submitting a quiz with blanks asks in place */
+.quiz-go.warn { border-color: var(--warn); color: var(--warn); background: rgba(232, 165, 71, 0.1); }
+
+/* The minimised pill wrapped onto two lines, which is why it was taller than
+   the space the canvas reserved for it. */
+body.place-mini #chat-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Flashcard faces render markdown now, so they inherit the link/code colours
+   from the lesson. The card is not a document — its text is the content. */
+.fc-face code { color: inherit; background: rgba(255, 255, 255, 0.07); }
+.fc-face a { color: inherit; text-decoration: underline; }
+.fc-face strong { color: inherit; }
+
+/* ---------------- the spine, in the conversation ----------------
+   Matt's version of the plan: no window, no second thing to look at. It sits
+   at the top of the chat card, above the transcript, and stays put while the
+   history comes and goes — it is structure, not conversation. */
+#chat-plan { display: none; }
+body.plan-in-chat #chat-plan:not([hidden]) { display: block; margin-bottom: 9px; }
+.cp {
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(93, 135, 255, 0.13), rgba(93, 135, 255, 0.04));
+  border: 1px solid rgba(93, 135, 255, 0.4);
+  overflow: hidden;
+  animation: msg-in 340ms var(--ease-spring);
+}
+.cp-head {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 9px 11px; border: 0; background: transparent; cursor: pointer;
+  color: var(--text); text-align: left;
+  transition: background 140ms ease;
+}
+.cp-head:hover { background: rgba(255, 255, 255, 0.04); }
+.cp-head b { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-head em { font: 500 9.5px 'IBM Plex Mono', monospace; font-style: normal; color: var(--text-faint); }
+.cp-chev { width: 13px; height: 13px; color: var(--text-faint); transition: transform 240ms var(--ease-out); }
+.cp-head[aria-expanded="true"] .cp-chev { transform: rotate(180deg); }
+/* a progress dial small enough to be punctuation rather than a chart */
+.cp-ring {
+  flex: 0 0 auto; width: 15px; height: 15px; border-radius: 50%;
+  background: conic-gradient(var(--good) calc(var(--pct) * 1%), rgba(255, 255, 255, 0.11) 0);
+  position: relative;
+}
+.cp-ring::after {
+  content: ''; position: absolute; inset: 3.5px; border-radius: 50%;
+  background: #171b23;
+}
+.cp-list { padding: 2px 8px 8px; display: flex; flex-direction: column; gap: 1px; }
+.cp-list[hidden] { display: none; }   /* [hidden] loses to any author display rule */
+.cp-step {
+  display: flex; align-items: flex-start; gap: 8px; width: 100%;
+  padding: 6px 8px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text-dim); cursor: pointer;
+  font: 400 11.5px 'IBM Plex Sans', sans-serif; text-align: left; line-height: 1.45;
+  transition: background 140ms ease, color 140ms ease;
+  animation: rise 300ms var(--ease-out) backwards;
+}
+.cp-step:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+.cp-step i {
+  flex: 0 0 auto; width: 11px; height: 11px; margin-top: 3px;
+  border-radius: 50%; border: 1.5px solid var(--line-2);
+  display: grid; place-items: center;
+}
+.cp-step.doing { color: var(--text); cursor: default; }
+.cp-step.doing i { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.14); }
+.cp-step.doing i::after {
+  content: ''; width: 4px; height: 4px; border-radius: 50%; background: var(--accent-2);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.cp-step.done { color: var(--text-faint); }
+.cp-step.done span { text-decoration: line-through; text-decoration-color: var(--line-2); }
+.cp-step.done i { border-color: var(--good); background: var(--good); }
+.cp-step.done i::after { content: '✓'; font-size: 8px; font-weight: 700; color: #0a0c10; line-height: 1; }
+
+.cp-now { padding: 10px 12px 11px; border-top: 1px solid rgba(93, 135, 255, 0.22); }
+.cp-now.advancing { animation: stepDone 460ms var(--ease-out) forwards; }
+.cp-now > em {
+  display: flex; align-items: center; gap: 6px;
+  font: 600 8.5px 'IBM Plex Mono', monospace; font-style: normal;
+  text-transform: uppercase; letter-spacing: 1.3px; color: var(--accent-2);
+  margin-bottom: 4px;
+}
+.cp-now > em::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-2); animation: pulse 1.6s ease-in-out infinite;
+}
+.cp-now > b { display: block; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.cp-now > p { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
+.cp-empty { border-top: 0; }
+.cp-empty > b { color: var(--text-dim); font-weight: 500; }
+.cp-done {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin-top: 8px; padding: 6px 8px;
+  border-radius: 8px; background: rgba(46, 204, 139, 0.08);
+  border: 1px solid rgba(46, 204, 139, 0.2);
+}
+.cp-done i { flex: 0 0 auto; width: 11px; height: 11px; margin-top: 2px; color: var(--good); }
+.cp-done svg { width: 100%; height: 100%; stroke-width: 2; }
+.cp-done span { font-size: 10.5px; color: var(--text-dim); line-height: 1.45; }
+.cp-actions { display: flex; gap: 6px; margin-top: 10px; }
+.cp-go {
+  flex: 1; height: 31px; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 11.5px 'IBM Plex Sans', sans-serif;
+  transition: filter 150ms ease, transform 150ms ease, opacity 150ms ease;
+}
+.cp-go:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+.cp-go:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+.cp-stuck {
+  height: 31px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text-dim);
+  font: 500 11.5px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: all 150ms ease;
+}
+.cp-stuck:hover:not(:disabled) { color: var(--warn); border-color: var(--warn); background: rgba(232, 165, 71, 0.08); }
+.cp-go:disabled, .cp-stuck:disabled { opacity: 0.45; cursor: default; }
+/* the spine survives the transcript being tucked away — it is not conversation */
+body.plan-in-chat.acting #chat-plan:not([hidden]),
+body.plan-in-chat.chat-collapsed #chat-plan:not([hidden]) { display: block; }
+/* in the minimised pill there is no room for it */
+body.place-mini #chat-plan { display: none !important; }
+
+/* the spine writing itself, in the conversation */
+.cp-drafting .cp-head.as-text { cursor: default; padding-bottom: 4px; }
+.cp-drafting .cp-head.as-text:hover { background: transparent; }
+.cp-drafting .cp-step { cursor: default; }
+.cp-drafting .cp-step:hover { background: transparent; color: var(--text-dim); }
+.cp-writing { padding: 2px 12px 10px; }
+
+/* ---------------- the one control ----------------
+   Matt: "there should be just a slider — how crazy do you want to go… and all
+   of the parameters hang off just one." Everything else is still here, behind
+   Advanced, and still tracked either way. */
+.up-modes { display: flex; flex-direction: column; gap: 7px; margin: 14px 0 4px; }
+.up-mode {
+  text-align: left; padding: 11px 13px;
+  border: 1px solid var(--line-2); border-radius: 12px;
+  background: var(--fill-1); color: var(--text); cursor: pointer;
+  transition: all 160ms ease;
+}
+.up-mode b { display: block; font-size: 13px; font-weight: 600; }
+.up-mode span { display: block; font-size: 11px; color: var(--text-faint); margin-top: 3px; line-height: 1.45; }
+.up-mode:hover { border-color: var(--accent); background: rgba(93, 135, 255, 0.06); }
+.up-mode.on { border-color: var(--accent); background: rgba(93, 135, 255, 0.13); box-shadow: 0 0 0 3px rgba(93, 135, 255, 0.08); }
+.up-mode.on b::after { content: ' ✓'; color: var(--accent-2); }
+.up-adv {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  margin-top: 16px; padding: 9px 0;
+  border: 0; border-top: 1px solid var(--line); background: transparent;
+  color: var(--text-faint); cursor: pointer;
+  font: 500 10px 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1.1px;
+  transition: color 140ms ease;
+}
+.up-adv:hover { color: var(--text-dim); }
+.up-adv svg { width: 13px; height: 13px; transition: transform 240ms var(--ease-out); }
+.up-adv[aria-expanded="true"] svg { transform: rotate(180deg); }
+.up-advbody[hidden] { display: none; }
+.up-advbody .up-group:first-child { border-top: 0; padding-top: 0; margin-top: 4px; }
+
+/* ---------------- the pace dial ----------------
+   One control, and every parameter hangs off it. Matt: "there should be just a
+   slider — how crazy do you want to go. Like, there's slow walk, walk, run,
+   sprint." A range input rather than a row of buttons, because the difference
+   between the settings is one of degree, not of kind. */
+.dial { margin: 18px 0 4px; }
+.dial input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; border-radius: 3px; outline: none;
+  background: linear-gradient(90deg, var(--accent) 0%, #7b5cff 100%);
+  cursor: pointer;
+}
+.dial-custom input[type="range"] { background: var(--line-2); }
+.dial input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(93, 135, 255, 0.25);
+  cursor: grab; transition: transform 140ms ease, box-shadow 140ms ease;
+}
+.dial input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.12); }
+.dial input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; transform: scale(1.05); }
+.dial input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(93, 135, 255, 0.25);
+  cursor: grab;
+}
+.dial-ticks { display: flex; justify-content: space-between; margin-top: 10px; }
+.dial-ticks span {
+  flex: 1; text-align: center;
+  font: 500 10px 'IBM Plex Mono', monospace; letter-spacing: 0.4px;
+  color: var(--text-faint); transition: color 180ms ease;
+}
+.dial-ticks span:first-child { text-align: left; }
+.dial-ticks span:last-child { text-align: right; }
+.dial-ticks span.on { color: var(--accent-2); font-weight: 600; }
+.dial-sub {
+  margin-top: 10px !important; min-height: 32px;
+  font-size: 11.5px !important; line-height: 1.5; color: var(--text-dim) !important;
+}
+#gate-card .dial-sub { text-align: center; }
+.gate-go {
+  min-width: 130px; height: 40px; border: 0; border-radius: 11px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 13px 'IBM Plex Sans', sans-serif;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+.gate-go:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+/* ================= the agent surface =================
+   Matt's spec, and the whole point of the separation:
+
+     "The chat is really two parts, fused together and never appearing in
+      separate places… the chat input box should always be underneath the chat
+      history. However the chat history should always be on the background —
+      the canvas, the dark layer underneath the app windows. The chat input box
+      is like an app container. It needs to be a different colour, it needs to
+      be differentiated from the canvas. But the text itself just lays on top
+      of the canvas."
+
+   So: the transcript is text on the canvas — no card, no panel, nothing to
+   mistake for a window. The composer is the only container, and it is the one
+   thing that never moves. The agent is the surface; the apps sit on top of it. */
+body.agent-surface #chatdock,
+body.agent-surface #chatdock.fused {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+/* the transcript, laid straight on the canvas */
+body.agent-surface #chat-log {
+  padding: 0 2px 16px;
+  gap: 16px;
+  scrollbar-width: none;
+}
+body.agent-surface #chat-log::-webkit-scrollbar { width: 0; }
+body.agent-surface .msg.agent .bubble {
+  color: var(--text-dim);
+  font-size: 14px; line-height: 1.68;
+}
+body.agent-surface .msg.user .bubble {
+  background: transparent; border: 0; padding: 0;
+  color: var(--text); font-weight: 500;
+}
+/* the learner's turn still reads as a turn, without becoming a box */
+body.agent-surface .msg.user { align-self: flex-start; align-items: flex-start; max-width: 100%; }
+body.agent-surface .msg.user .bubble::before {
+  content: ''; display: block; width: 22px; height: 2px; border-radius: 2px;
+  background: var(--accent); margin-bottom: 7px;
+}
+
+/* the composer: the one container on the surface */
+body.agent-surface #chat-form {
+  background: linear-gradient(180deg, #1b202a, #141922);
+  border: 1px solid var(--line-2);
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  padding: 5px;
+}
+body.agent-surface #chat-form:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 3px rgba(93, 135, 255, 0.12);
+}
+body.agent-surface #chat-input { background: transparent; border: 0; }
+body.agent-surface #chat-input:focus { box-shadow: none; }
+
+/* Apps take the foreground; the transcript recedes into the canvas it was
+   already lying on rather than being clipped away. The composer never moves. */
+body.agent-surface.has-apps #chat-log-wrap { opacity: 0; pointer-events: none; }
+body.agent-surface.has-apps #chat-log { transform: translateY(14px); }
+body.agent-surface #chat-log-wrap {
+  transition: opacity 320ms ease, grid-template-rows 380ms var(--ease-spring);
+}
+body.agent-surface #chat-log { transition: transform 380ms var(--ease-out); }
+
+/* ---------------- pinned messages ----------------
+   A conversation that runs long buries the thing you keep coming back to.
+   Anything can be pinned; the plan pins itself, because it is the message
+   people return to most. */
+.msg { position: relative; }
+.msg-pin {
+  position: absolute; top: -2px; right: -4px;
+  width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-faint); cursor: pointer; opacity: 0;
+  display: grid; place-items: center;
+  transition: opacity 150ms ease, color 140ms ease, background 140ms ease;
+}
+.msg-pin svg { width: 12px; height: 12px; }
+.msg:hover .msg-pin { opacity: 1; }
+.msg-pin:hover { color: var(--accent-2); background: rgba(93, 135, 255, 0.12); }
+.msg.pinned .msg-pin { opacity: 1; color: var(--accent-2); }
+.msg.pinned .bubble { border-left: 2px solid rgba(93, 135, 255, 0.5); padding-left: 11px; }
+/* viewing only what was pinned */
+body.pinned-only .msg:not(.pinned) { display: none; }
+#pinned-btn {
+  align-self: flex-start; display: flex; align-items: center; gap: 6px;
+  margin: 0 0 8px 2px; padding: 5px 10px;
+  border: 1px solid var(--line-2); border-radius: 999px;
+  background: var(--fill-1); color: var(--text-faint); cursor: pointer;
+  font: 500 10.5px 'IBM Plex Sans', sans-serif;
+  transition: all 150ms ease;
+}
+#pinned-btn svg { width: 11px; height: 11px; }
+#pinned-btn:hover { color: var(--text); border-color: var(--accent); }
+#pinned-btn.on { color: var(--accent-2); border-color: var(--accent); background: rgba(93, 135, 255, 0.12); }
+#pinned-btn[hidden] { display: none; }
+body.acting #pinned-btn { display: none; }
+
+/* ---------------- annotations ----------------
+   Mark something in an app and talk to the agent about that exact thing. */
+.annot-mark {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px; border-radius: 4px;
+  background: rgba(93, 135, 255, 0.1);
+}
+::selection { background: rgba(93, 135, 255, 0.35); }
+.annot {
+  position: fixed; z-index: 220;
+  padding: 9px; border-radius: 13px;
+  background: linear-gradient(180deg, #1b202a, #12161e);
+  border: 1px solid var(--accent);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  animation: rise 220ms var(--ease-out);
+}
+.annot-quote {
+  font-size: 10.5px; line-height: 1.45; color: var(--text-faint);
+  padding: 0 3px 7px; margin-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid var(--accent); padding-left: 8px;
+  max-height: 44px; overflow: hidden;
+}
+.annot-input {
+  width: 100%; resize: none; min-height: 34px;
+  border: 0; background: transparent; color: var(--text);
+  font: 400 12.5px 'IBM Plex Sans', sans-serif; line-height: 1.5;
+  padding: 2px 3px; outline: none;
+}
+.annot-actions { display: flex; gap: 6px; margin-top: 6px; }
+.annot-add {
+  flex: 1; height: 28px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text-dim);
+  font: 500 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: all 140ms ease;
+}
+.annot-add:hover { color: var(--text); border-color: var(--accent); }
+.annot-send {
+  flex: 1; height: 28px; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 11px 'IBM Plex Sans', sans-serif;
+  transition: filter 140ms ease;
+}
+.annot-send:hover { filter: brightness(1.12); }
+
+/* the batch: marks collected but not yet sent */
+#annot-bar {
+  position: fixed; z-index: 210; left: 50%; bottom: 18px;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 9px;
+  max-width: min(760px, 92vw);
+  padding: 8px 9px 8px 14px;
+  border-radius: 999px;
+  background: rgba(18, 22, 30, 0.97);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--accent);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  animation: rise 260ms var(--ease-spring);
+}
+.ab-count { font: 600 10.5px 'IBM Plex Mono', monospace; color: var(--accent-2); white-space: nowrap; }
+.ab-list { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+.ab-list::-webkit-scrollbar { height: 0; }
+.ab-item {
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  padding: 4px 8px; border-radius: 999px;
+  border: 1px solid var(--line-2); background: var(--fill-1);
+  color: var(--text-dim); cursor: pointer;
+  font: 400 10.5px 'IBM Plex Sans', sans-serif;
+  transition: all 140ms ease;
+}
+.ab-item i { font-style: normal; color: var(--text-faint); }
+.ab-item:hover { border-color: var(--bad); color: var(--text); }
+.ab-item:hover i { color: var(--bad); }
+.ab-send {
+  flex: 0 0 auto; height: 28px; padding: 0 14px;
+  border: 0; border-radius: 999px; background: var(--accent); color: #fff;
+  font: 600 11px 'IBM Plex Sans', sans-serif; cursor: pointer;
+  transition: filter 140ms ease;
+}
+.ab-send:hover { filter: brightness(1.12); }
+
+/* With nothing in front of it the transcript IS the canvas, so it gets a
+   comfortable reading column rather than a 400px gutter. When apps open it
+   yields the middle and retreats to its dock — the composer never moves
+   between the two, it just narrows. */
+/* superseded by canvas-chat: the dock spans the stage and the columns inside
+   it do the positioning */
+body.agent-surface:not(.canvas-chat):not(.has-apps) #chatdock {
+  left: 50% !important; right: auto !important;
+  width: min(720px, 92vw) !important;
+  transform: translateX(-50%);
+  top: 64px !important; bottom: 18px !important;
+  justify-content: flex-end !important;
+}
+body.agent-surface:not(.canvas-chat):not(.has-apps) #chat-log { font-size: 14.5px; }
+body.agent-surface:not(.canvas-chat):not(.has-apps) #chat-bar { display: none !important; }
+body.agent-surface #chatdock { transition: width 480ms var(--ease-out), left 480ms var(--ease-out), transform 480ms var(--ease-out); }
+
+/* ================= THE CANVAS IS THE CHAT =================
+   Matt, precisely:
+
+     "The chat history should always be on the background. There is a canvas on
+      the back of the thing, the dark layer that is underneath the app windows.
+      The canvas is where the text of the chat history is displayed. However
+      the chat input box is like an app container — a different colour,
+      differentiated from the canvas. But the text itself just lays on top of
+      the canvas… Only when the agent starts to invoke applications does the
+      chat history potentially disappear. It dissolves to the background."
+
+   So the transcript is not in a panel at all. It is painted across the whole
+   canvas, UNDER the app windows, and the composer is a container fixed beneath
+   it. Apps are opaque and float on top, so as they fill the screen they cover
+   the conversation — that IS the dissolve. Nothing is hidden by a rule; the
+   history stays exactly where it was and comes back as windows close. */
+body.canvas-chat #chatdock {
+  position: absolute;
+  left: 0 !important; right: 0 !important; top: 0 !important; bottom: 0 !important;
+  width: auto !important; transform: none !important;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 0 0 16px;
+  background: none !important; border: 0 !important; box-shadow: none !important;
+  backdrop-filter: none !important; border-radius: 0 !important;
+  pointer-events: none;              /* the canvas beneath stays reachable */
+  z-index: 1;                        /* .tile is 2 — apps cover the talk */
+}
+body.canvas-chat #chat-log-wrap {
+  flex: 1 1 auto; min-height: 0;
+  display: block !important; opacity: 1 !important;
+  overflow: hidden;
+  margin: 0 auto; width: min(760px, 84vw);
+  pointer-events: auto;
+}
+body.canvas-chat #chat-log {
+  height: 100%; max-height: none;
+  padding: 18px 4px 20px; gap: 18px;
+  overflow-y: auto; scrollbar-width: none;
+  justify-content: flex-end;         /* the newest sits just above the box */
+}
+body.canvas-chat #chat-log::-webkit-scrollbar { width: 0; }
+
+/* the composer: the one container, always in the same place */
+body.canvas-chat #chat-form,
+body.canvas-chat #chat-status,
+body.canvas-chat #pinned-btn,
+body.canvas-chat #chat-plan { pointer-events: auto; }
+body.canvas-chat #chat-form {
+  margin: 0 auto; width: min(760px, 84vw);
+  z-index: 3;                        /* above the app windows: never covered */
+  position: relative;
+}
+body.canvas-chat #chat-plan,
+body.canvas-chat #pinned-btn,
+body.canvas-chat #chat-status { margin-left: auto; margin-right: auto; width: min(760px, 84vw); }
+body.canvas-chat #pinned-btn { width: auto; margin-left: calc(50% - min(380px, 42vw)); }
+body.canvas-chat #chat-bar { display: none !important; }
+
+/* Windows are opaque, so they hide the talk behind them. What is still visible
+   dims a little while the agent is working, which is the "dissolve". */
+body.canvas-chat.has-apps #chat-log { opacity: 0.5; transition: opacity 420ms ease; }
+body.canvas-chat.acting #chat-log { opacity: 0.28; }
+body.canvas-chat #chat-log { transition: opacity 420ms ease; }
+body.canvas-chat.has-apps #chat-log-wrap:hover ~ * { }
+body.canvas-chat.has-apps #chat-log:hover { opacity: 0.95; }
+
+/* the workspace must not paint over the conversation */
+body.canvas-chat #canvas::after { z-index: 0; }
+body.canvas-chat #workspace { background: transparent; }
+/* the empty state is already the canvas — no separate centred mode needed */
+body.canvas-chat.chat-center #chatdock { top: 0 !important; bottom: 0 !important; }
+body.canvas-chat #hero { padding-bottom: 20px; }
+/* The agent's own furniture — the plan, the pinned chip, the status, the
+   composer — belongs to the agent, not to the canvas, so windows never cover
+   it. Only the transcript itself dissolves behind them. */
+body.canvas-chat #chat-form,
+body.canvas-chat #chat-plan,
+body.canvas-chat #pinned-btn,
+body.canvas-chat #chat-status { position: relative; z-index: 3; }
+/* the spine is furniture at the bottom of the agent surface: it must not grow
+   tall enough to shove itself under the topbar */
+/* Cap the STEP LIST, not the card: the head has to stay clickable and the
+   current step has to stay whole. */
+body.canvas-chat #chat-plan .cp-list { max-height: 26vh; overflow-y: auto; scrollbar-width: thin; }
+/* The conversation is the canvas, so there is no dock column to make room for:
+   the workspace spans the whole stage above the composer, and metrics() measures
+   the same thing. A mismatch here draws tiles wider than the canvas holding them. */
+body.canvas-chat #workspace {
+  left: 14px !important; right: 14px !important; top: 14px !important;
+  bottom: 14px !important;
+  opacity: 1 !important; pointer-events: auto !important;
+}
+/* keep the agent's furniture in one centred column with the composer */
+body.canvas-chat #chat-plan,
+body.canvas-chat #chat-status { width: min(760px, 84vw); margin-left: auto; margin-right: auto; }
+body.canvas-chat #pinned-btn { margin-left: auto; margin-right: auto; align-self: center; }
+/* #chatdock must NOT create a stacking context, or its children cannot rise
+   above the app windows however high their z-index: they would only be ordered
+   within the dock. The transcript sits below the windows, the agent's furniture
+   above them, and the dock itself takes no part. */
+body.canvas-chat #chatdock { z-index: auto !important; }
+body.canvas-chat #chat-log-wrap { position: relative; z-index: 1; }
+body.canvas-chat #chat-form,
+body.canvas-chat #chat-plan,
+body.canvas-chat #pinned-btn,
+body.canvas-chat #chat-status { z-index: 5; }
+
+/* ================= where the conversation lives =================
+   The transcript's position is not a preference — it follows the work:
+   centred when there is nothing else on screen, pinned to the left the moment
+   an app opens, and there until the last one closes. It is always on the
+   background. The composer stays independently dockable.
+
+   The hero is part of the surface and must be clickable — the dock is
+   click-through so the canvas beneath stays reachable, and every interactive
+   child has to opt back in. Missing it here is why the suggestions did
+   nothing. */
+body.canvas-chat #hero { pointer-events: auto; }
+
+/* nothing open: the conversation owns the middle */
+body.canvas-chat:not(.has-apps) #chat-log-wrap,
+body.canvas-chat:not(.has-apps) #hero {
+  margin-left: auto; margin-right: auto;
+  width: min(760px, 84vw);
+}
+body.canvas-chat:not(.has-apps).chat-center #chatdock { justify-content: center; }
+body.canvas-chat:not(.has-apps).chat-center #chat-log-wrap { flex: 0 0 auto; }
+
+/* an app opens: it moves left and stays there while any app is open */
+body.canvas-chat.has-apps #chat-log-wrap {
+  position: absolute; left: 18px; top: 14px;
+  width: min(360px, 30vw); height: auto; max-height: calc(100% - 150px);
+  margin: 0; flex: none;
+}
+body.canvas-chat.has-apps #chat-log { padding: 0 4px; font-size: 13px; }
+body.canvas-chat #chat-log-wrap {
+  transition: left 460ms var(--ease-out), width 460ms var(--ease-out),
+    top 460ms var(--ease-out), opacity 320ms ease;
+}
+
+/* folded away — for a full-screen app, or because they asked. It becomes a tab
+   on the left wall; clicking it brings the conversation back. */
+body.canvas-chat.talk-folded #chat-log-wrap { opacity: 0; pointer-events: none; }
+#talk-tab {
+  position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+  z-index: 6; display: none;
+  width: 34px; padding: 12px 0 14px;
+  border: 1px solid var(--line-2); border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: linear-gradient(180deg, #1b202a, #141922);
+  box-shadow: 6px 0 20px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  display: none; flex-direction: column; align-items: center; gap: 8px;
+  transition: width 180ms ease, background 180ms ease;
+}
+body.canvas-chat.talk-folded #talk-tab { display: flex; }
+#talk-tab img { width: 19px; height: 19px; object-fit: contain; }
+#talk-tab span {
+  writing-mode: vertical-rl; font: 500 9px 'IBM Plex Mono', monospace;
+  letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-faint);
+}
+#talk-tab:hover { width: 40px; background: linear-gradient(180deg, #222836, #171c26); }
+#talk-tab:hover span { color: var(--text-dim); }
+
+/* ---------------- corrections ----------------
+   The spine is a PINNED MESSAGE inside the transcript, not a card bolted above
+   the composer: it lives in the same column as everything else the agent says,
+   scrolls with it, and moves centre→left with it. */
+body.canvas-chat #chat-plan {
+  width: auto !important; max-width: 100%;
+  margin: 0 0 4px !important; padding: 0;
+  position: static !important; z-index: auto !important;
+  order: -1;                      /* the plan sits at the top of the transcript */
+}
+body.canvas-chat #chat-plan[hidden] { display: none !important; }
+/* the wrap holds the pinned spine and the scrolling transcript, in one column */
+body.canvas-chat #chat-log-wrap { display: flex; flex-direction: column; }
+body.canvas-chat #chat-log { flex: 1 1 auto; min-height: 0; }
+
+/* the agent's words are the content — they read white, not grey */
+body.canvas-chat .msg.agent .bubble { color: var(--text); }
+body.canvas-chat .msg.user .bubble { color: var(--text); opacity: 0.72; }
+body.canvas-chat #chat-log { color: var(--text); }
+
+/* No opacity games on live text — fading a scrolling transcript over a dotted
+   canvas is what made it look glitchy. Windows are opaque and simply cover it. */
+body.canvas-chat.has-apps #chat-log,
+body.canvas-chat.acting #chat-log { opacity: 1; }
+body.canvas-chat #chat-log { transition: none; }
+/* the pinned chip belongs with the transcript it filters, not floating above
+   the composer */
+body.canvas-chat #pinned-btn {
+  position: absolute; z-index: 6;
+  margin: 0; align-self: auto;
+}
+body.canvas-chat:not(.has-apps) #pinned-btn { left: 50%; transform: translateX(-50%); top: 14px; }
+body.canvas-chat.has-apps #pinned-btn { left: 18px; transform: none; top: 14px; }
+body.canvas-chat.has-apps #chat-log-wrap { top: 48px; max-height: calc(100% - 190px); }
+body.canvas-chat:not(.has-apps) #chat-log-wrap { padding-top: 34px; }

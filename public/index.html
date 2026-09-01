@@ -3,27 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chameleon — Adaptive Workspace</title>
+<title>Chameleon — Learn anything</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/png" href="chameleon.png">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <div id="aurora"><i></i><i></i><i></i></div>
+<body class="chat-center booting">
+  <div id="aurora"></div>
+
+  <!-- sign in, then the short baseline that sets how this person likes to work -->
+  <div id="gate">
+    <div id="gate-card">
+      <img class="gate-glyph" src="chameleon.png" alt="">
+      <div id="gate-body"></div>
+    </div>
+  </div>
+
   <div id="shell">
     <header id="topbar">
       <div id="brand">
-        <div id="brand-mark"><img src="chameleon.png" alt="Chameleon"></div>
+        <button id="brand-mark" title="Start fresh — clears local state and reloads"><img src="chameleon.png" alt="Chameleon"></button>
       </div>
-      <div id="ctxbar"></div>
-      <div id="usecases" aria-label="suggested moves"></div>
+      <div id="sessmenu">
+        <button id="sess-btn"><b id="sess-title">…</b>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 6.5L8 10l4-3.5"/></svg>
+        </button>
+        <div id="sess-pop"></div>
+      </div>
+      <div id="topspacer"></div>
       <div id="appsmenu">
         <button id="apps-btn" title="All tools">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2.5" y="2.5" width="4.2" height="4.2" rx="1.2"/><rect x="9.3" y="2.5" width="4.2" height="4.2" rx="1.2"/><rect x="2.5" y="9.3" width="4.2" height="4.2" rx="1.2"/><rect x="9.3" y="9.3" width="4.2" height="4.2" rx="1.2"/></svg>
         </button>
         <div id="apps-pop"></div>
+      </div>
+      <div id="usermenu">
+        <button id="user-btn" title="How you like to work"><span id="user-initial">·</span></button>
       </div>
     </header>
 
@@ -32,34 +49,57 @@
         <div id="canvas"></div>
       </section>
 
-      <aside id="chatpane">
-        <div id="chat-drag" title="Drag to resize"></div>
-        <div id="chat-head">
-          <span class="ch-dot"></span>
-          <b>Chameleon</b>
-          <span id="chat-grip" title="Drag me — edges dock, bottom-right corner minimizes, anywhere else floats">
+      <!-- The fused chat surface: composer always present, history rises above
+           it, and the history yields while the agent acts in the apps. -->
+      <div id="chatdock">
+        <div id="chat-bar">
+          <span id="chat-grip" title="Drag to move — edges dock, corner minimizes">
             <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5.5" cy="4" r="1.2"/><circle cx="10.5" cy="4" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="10.5" cy="8" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/><circle cx="10.5" cy="12" r="1.2"/></svg>
           </span>
+          <span id="chat-where"></span>
+          <button id="chat-collapse" type="button" title="Hide the conversation">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6.5L8 10l4-3.5"/></svg>
+          </button>
         </div>
-        <div id="chat-hero">
+        <div id="chat-status"><i></i><span></span></div>
+        <!-- the spine, when it lives in the conversation rather than a window -->
+        <button id="pinned-btn" hidden>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h4l-.5 4 2.5 2v1H4V8l2.5-2z"/><path d="M8 9v5"/></svg>
+          <span></span>
+        </button>
+        <div id="chat-log-wrap"><div id="chat-plan" class="msg pinned"></div><div id="chat-log"></div></div>
+        <div id="hero">
           <img class="hero-glyph" src="chameleon.png" alt="">
-          <h1>Where should we start?</h1>
-          <p>Five accounts. Nine live deals. I open, resize and clear tools as the conversation moves — the workspace is ours to shape.</p>
+          <h1>What do you want to do today?</h1>
+          <p>Ask me something small and you'll just get an answer. Give me something bigger — learning a subject, preparing for something — and I'll lay it out and work through it with you.</p>
+          <div id="suggestions"></div>
         </div>
-        <div id="chat-log"></div>
-        <div id="suggestions"></div>
         <form id="chat-form" autocomplete="off">
-          <input id="chat-input" placeholder="Ask for anything…" maxlength="500">
+          <input id="chat-input" placeholder="Ask, answer, or steer…" maxlength="4000">
           <button id="chat-send" type="submit" aria-label="send">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2L7.5 8.5M14 2l-4.2 12-2.3-5.5L2 6.2z"/></svg>
+            <svg class="ic-send" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2L7.5 8.5M14 2l-4.2 12-2.3-5.5L2 6.2z"/></svg>
+            <svg class="ic-stop" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="currentColor"/></svg>
+            <span class="spin"></span>
           </button>
         </form>
-      </aside>
+      </div>
     </main>
   </div>
 
+  <!-- the conversation folded into the left wall; click to bring it back -->
+  <button id="talk-tab" title="Show the conversation">
+    <img src="chameleon.png" alt="">
+    <span>talk</span>
+  </button>
+
+  <div id="user-pop"></div>
+
+  <script src="gate.js"></script>
   <script src="layout.js"></script>
+  <script src="richtext.js"></script>
   <script src="apps.js"></script>
-  <script src="app.js"></script>
+  <script src="annotate.js"></script>
+  <script src="chat.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>

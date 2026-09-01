@@ -3,3 +3,4 @@
 node_modules/
 Screenshot*.png
 *.log
+data/
